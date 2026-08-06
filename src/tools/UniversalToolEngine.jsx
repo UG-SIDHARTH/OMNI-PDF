@@ -7,7 +7,7 @@ import {
   Wrench, FileText, Image, FileCode, Presentation,
   Table, Globe, FileImage, FileType, MonitorPlay,
   Grid, Archive, RotateCw, Hash, Stamp, Crop,
-  Edit3, CheckSquare, Unlock, Lock, PenTool, EyeOff,
+  Edit3, CheckSquare, Unlock, Lock, PenTool, EyeOff, Eye,
   Columns, Sparkles, Languages, FileCode2, Download,
   RefreshCw, AlertCircle, CheckCircle2, ArrowLeft,
   Copy, Check, MessageSquare
@@ -67,6 +67,7 @@ export default function UniversalToolEngine({ tool, onBack }) {
   const [watermarkText, setWatermarkText] = useState('CONFIDENTIAL');
   const [watermarkOpacity, setWatermarkOpacity] = useState(0.3);
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [numberPosition, setNumberPosition] = useState('bottom-right');
   const [targetLang, setTargetLang] = useState('Spanish');
   const [htmlCode, setHtmlCode] = useState('<h1>Sample PDF Document</h1><p>Generated from HTML input.</p>');
@@ -306,7 +307,7 @@ export default function UniversalToolEngine({ tool, onBack }) {
             const userPass = password || 'protected123';
             pages.forEach(p => {
               const { width, height } = p.getSize();
-              p.drawText(`🔒 PROTECTED - ENCRYPTED WITH PASSWORD`, {
+              p.drawText(`[PROTECTED - ENCRYPTED WITH PASSWORD]`, {
                 x: 30, y: height - 20, size: 8, font, color: rgb(0.8, 0.1, 0.1)
               });
             });
@@ -316,7 +317,7 @@ export default function UniversalToolEngine({ tool, onBack }) {
             const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
             pages.forEach(p => {
               const { width, height } = p.getSize();
-              p.drawText(`🔓 UNLOCKED - SECURITY RESTRICTIONS REMOVED`, {
+              p.drawText(`[UNLOCKED - SECURITY RESTRICTIONS REMOVED]`, {
                 x: 30, y: height - 20, size: 8, font, color: rgb(0.1, 0.6, 0.2)
               });
             });
@@ -521,17 +522,28 @@ export default function UniversalToolEngine({ tool, onBack }) {
             </div>
           )}
 
-          {toolId === 'protect-pdf' && (
+          {(toolId === 'protect-pdf' || toolId === 'unlock-pdf') && (
             <div className="glass-panel p-6 rounded-2xl space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Set Password:</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter encryption password"
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none focus:border-rose-500"
-                />
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  {toolId === 'protect-pdf' ? 'Set Encryption Password:' : 'Enter PDF Password (if required):'}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={toolId === 'protect-pdf' ? "Enter password to protect PDF" : "Enter password to unlock PDF"}
+                    className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none focus:border-rose-500 pr-12"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
             </div>
           )}
