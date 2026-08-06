@@ -1,0 +1,19 @@
+tunnel: 4e0219e4-6f90-4e34-bdf3-d88432786239
+credentials-file: /etc/cloudflared/4e0219e4-6f90-4e34-bdf3-d88432786239.json
+
+ingress:
+  - hostname: deploy.ugsidharth.in
+    service: http://127.0.0.1:80
+  - hostname: novara.ugsidharth.in
+    service: http://127.0.0.1:8090
+  - hostname: www.ugsidharth.in
+    service: http://127.0.0.1:3500
+  - hostname: ugsidharth.in
+    service: http://127.0.0.1:3500
+  - hostname: medicinebox.ugsidharth.in
+    service: http://127.0.0.1:8082
+  - hostname: qrcreater.ugsidharth.in
+    service: http://127.0.0.1:8083
+  - hostname: omnipdf.ugsidharth.in
+    service: http://127.0.0.1:8086
+  - service: http_status:404
