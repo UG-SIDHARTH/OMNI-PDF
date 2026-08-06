@@ -21,7 +21,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=5000
+ENV PORT=8085
 
 # Copy dependency manifests
 COPY package.json package-lock.json ./
@@ -38,12 +38,12 @@ COPY --from=builder /app/server ./server
 # Create uploads storage directory
 RUN mkdir -p storage/uploads
 
-# Expose port 5000
-EXPOSE 5000
+# Expose port 8085
+EXPOSE 8085
 
 # Container health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:5000/api/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8085/api/health || exit 1
 
 # Start Express server
 CMD ["node", "server/index.js"]

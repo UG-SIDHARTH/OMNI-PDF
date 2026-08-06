@@ -8,7 +8,7 @@ import { ensureSession } from './middleware/security.js';
 import apiRouter from './routes/api.js';
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8085;
 const STORAGE_DIR = path.resolve('storage/uploads');
 
 // CORS configuration - strict origin checks
