@@ -1,14 +1,12 @@
-version: '3.8'
-
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ilovepdf-clone
+    container_name: omnipdf-app
     ports:
-      - "8085:8085"
       - "8084:8084"
+      - "8085:8085"
     environment:
       - PORT=8085
       - NODE_ENV=production
