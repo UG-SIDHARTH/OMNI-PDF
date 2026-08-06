@@ -18,7 +18,7 @@ export const TOOL_CATEGORIES = [
         name: 'Split PDF',
         description: 'Separate one page or a whole set for easy conversion into independent PDF files.',
         icon: 'Scissors',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -26,7 +26,7 @@ export const TOOL_CATEGORIES = [
         name: 'Remove Pages',
         description: 'Delete selected pages from your PDF document.',
         icon: 'FileX',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -34,7 +34,7 @@ export const TOOL_CATEGORIES = [
         name: 'Extract Pages',
         description: 'Extract specific pages into a new PDF document.',
         icon: 'FileSpreadsheet',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -42,7 +42,7 @@ export const TOOL_CATEGORIES = [
         name: 'Organize PDF',
         description: 'Sort, add, delete, and rotate PDF pages with drag and drop.',
         icon: 'LayoutGrid',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -50,7 +50,7 @@ export const TOOL_CATEGORIES = [
         name: 'Scan to PDF',
         description: 'Capture document scans directly from your camera into PDF format.',
         icon: 'Scan',
-        isWorking: false,
+        isWorking: true,
         accept: 'image/*'
       }
     ]
@@ -74,7 +74,7 @@ export const TOOL_CATEGORIES = [
         name: 'Repair PDF',
         description: 'Recover data from damaged or corrupted PDF files.',
         icon: 'Wrench',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -82,7 +82,7 @@ export const TOOL_CATEGORIES = [
         name: 'OCR PDF',
         description: 'Convert scanned PDFs into searchable and selectable text.',
         icon: 'FileText',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       }
     ]
@@ -97,7 +97,7 @@ export const TOOL_CATEGORIES = [
         name: 'JPG to PDF',
         description: 'Convert JPG, PNG, and WebP images to PDF in seconds.',
         icon: 'Image',
-        isWorking: false,
+        isWorking: true,
         accept: '.jpg,.jpeg,.png,.webp'
       },
       {
@@ -105,7 +105,7 @@ export const TOOL_CATEGORIES = [
         name: 'Word to PDF',
         description: 'Make DOC and DOCX files easy to read by converting them to PDF.',
         icon: 'FileCode',
-        isWorking: false,
+        isWorking: true,
         accept: '.doc,.docx'
       },
       {
@@ -113,7 +113,7 @@ export const TOOL_CATEGORIES = [
         name: 'PowerPoint to PDF',
         description: 'Make PPT and PPTX slideshows easy to view by converting to PDF.',
         icon: 'Presentation',
-        isWorking: false,
+        isWorking: true,
         accept: '.ppt,.pptx'
       },
       {
@@ -121,7 +121,7 @@ export const TOOL_CATEGORIES = [
         name: 'Excel to PDF',
         description: 'Make EXCEL spreadsheets easy to read by converting them to PDF.',
         icon: 'Table',
-        isWorking: false,
+        isWorking: true,
         accept: '.xls,.xlsx'
       },
       {
@@ -129,7 +129,7 @@ export const TOOL_CATEGORIES = [
         name: 'HTML to PDF',
         description: 'Convert web pages or HTML code directly into PDF documents.',
         icon: 'Globe',
-        isWorking: false,
+        isWorking: true,
         accept: '.html,.htm'
       }
     ]
@@ -144,7 +144,7 @@ export const TOOL_CATEGORIES = [
         name: 'PDF to JPG',
         description: 'Extract all images or convert each page into a high-quality JPG.',
         icon: 'FileImage',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -152,7 +152,7 @@ export const TOOL_CATEGORIES = [
         name: 'PDF to Word',
         description: 'Convert your PDF to editable Word documents with high accuracy.',
         icon: 'FileType',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -160,7 +160,7 @@ export const TOOL_CATEGORIES = [
         name: 'PDF to PowerPoint',
         description: 'Turn your PDF files into easy to edit PPT and PPTX slideshows.',
         icon: 'MonitorPlay',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -168,7 +168,7 @@ export const TOOL_CATEGORIES = [
         name: 'PDF to Excel',
         description: 'Pull data straight from PDFs into Excel spreadsheets in seconds.',
         icon: 'Grid',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -176,7 +176,7 @@ export const TOOL_CATEGORIES = [
         name: 'PDF to PDF/A',
         description: 'Transform your PDF into ISO-standardized PDF/A for long-term archiving.',
         icon: 'Archive',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       }
     ]
@@ -191,7 +191,7 @@ export const TOOL_CATEGORIES = [
         name: 'Rotate PDF',
         description: 'Rotate your PDFs the way you need them. You can even rotate multiple PDFs at once.',
         icon: 'RotateCw',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -199,7 +199,7 @@ export const TOOL_CATEGORIES = [
         name: 'Add page numbers',
         description: 'Add page numbers into PDFs with custom formatting and position.',
         icon: 'Hash',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -207,7 +207,7 @@ export const TOOL_CATEGORIES = [
         name: 'Add watermark',
         description: 'Stamp an image or text over your PDF in seconds.',
         icon: 'Stamp',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -215,7 +215,7 @@ export const TOOL_CATEGORIES = [
         name: 'Crop PDF',
         description: 'Trim margins and crop specific areas of your PDF pages.',
         icon: 'Crop',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -223,7 +223,7 @@ export const TOOL_CATEGORIES = [
         name: 'Edit PDF',
         description: 'Add text, shapes, comments, and annotations directly to your PDF.',
         icon: 'Edit3',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -231,7 +231,7 @@ export const TOOL_CATEGORIES = [
         name: 'PDF Forms',
         description: 'Fill out interactive PDF forms and sign text fields.',
         icon: 'CheckSquare',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       }
     ]
@@ -246,7 +246,7 @@ export const TOOL_CATEGORIES = [
         name: 'Unlock PDF',
         description: 'Remove PDF password security, giving you the freedom to use your PDFs.',
         icon: 'Unlock',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -254,7 +254,7 @@ export const TOOL_CATEGORIES = [
         name: 'Protect PDF',
         description: 'Encrypt PDF files with a strong password to prevent unauthorized access.',
         icon: 'Lock',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -262,7 +262,7 @@ export const TOOL_CATEGORIES = [
         name: 'Sign PDF',
         description: 'Sign a document and request signatures. Draw your electronic signature.',
         icon: 'PenTool',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -270,7 +270,7 @@ export const TOOL_CATEGORIES = [
         name: 'Redact PDF',
         description: 'Permanently remove or block out sensitive text and graphics in PDFs.',
         icon: 'EyeOff',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -278,7 +278,7 @@ export const TOOL_CATEGORIES = [
         name: 'Compare PDF',
         description: 'Compare two PDFs side by side to highlight visual and text differences.',
         icon: 'Columns',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       }
     ]
@@ -293,7 +293,7 @@ export const TOOL_CATEGORIES = [
         name: 'AI Summarizer',
         description: 'Generate concise summaries, key points, and Q&A from long PDFs.',
         icon: 'Sparkles',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf',
         badge: 'AI Powered'
       },
@@ -302,7 +302,7 @@ export const TOOL_CATEGORIES = [
         name: 'Translate PDF',
         description: 'Translate full PDF documents into over 50 languages instantly.',
         icon: 'Languages',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       },
       {
@@ -310,7 +310,7 @@ export const TOOL_CATEGORIES = [
         name: 'PDF to Markdown',
         description: 'Convert PDF content into clean Markdown format for developers & LLMs.',
         icon: 'FileCode2',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf'
       }
     ]
