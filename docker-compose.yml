@@ -5,9 +5,9 @@ services:
       dockerfile: Dockerfile
     container_name: omnipdf-app
     ports:
-      - "8086:8084"
+      - "8091:8091"
     environment:
-      - PORT=8084
+      - PORT=8091
       - NODE_ENV=production
     restart: unless-stopped
     volumes:

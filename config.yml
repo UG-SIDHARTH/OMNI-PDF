@@ -15,5 +15,5 @@ ingress:
   - hostname: qrcreater.ugsidharth.in
     service: http://127.0.0.1:8083
   - hostname: omnipdf.ugsidharth.in
-    service: http://127.0.0.1:8086
+    service: http://127.0.0.1:8091
   - service: http_status:404
