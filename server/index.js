@@ -109,7 +109,7 @@ setInterval(runScheduledCleanup, 60 * 1000);
 // Also run cleanup on startup
 runScheduledCleanup();
 
-app.listen(PORT, () => {
-  console.log(`🚀 OmniPDF Server running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 OmniPDF Server running on http://0.0.0.0:${PORT}`);
   console.log(`🔒 Security active: 50MB limit, magic-byte inspection, 3h auto-delete cron worker`);
 });
