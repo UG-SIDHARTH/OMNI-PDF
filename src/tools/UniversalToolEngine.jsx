@@ -67,6 +67,7 @@ export default function UniversalToolEngine({ tool, onBack }) {
   const [watermarkText, setWatermarkText] = useState('CONFIDENTIAL');
   const [watermarkOpacity, setWatermarkOpacity] = useState(0.3);
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [numberPosition, setNumberPosition] = useState('bottom-right');
   const [targetLang, setTargetLang] = useState('Spanish');
@@ -116,6 +117,17 @@ export default function UniversalToolEngine({ tool, onBack }) {
     if (files.length === 0 && toolId !== 'html-to-pdf' && toolId !== 'scan-to-pdf') {
       setErrorMsg('Please select a file to process.');
       return;
+    }
+
+    if (toolId === 'protect-pdf') {
+      if (!password) {
+        setErrorMsg('Please enter a password to protect your PDF file.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setErrorMsg('Passwords do not match. Please enter the exact same password in both fields.');
+        return;
+      }
     }
 
     setIsProcessing(true);
@@ -541,18 +553,73 @@ export default function UniversalToolEngine({ tool, onBack }) {
             </div>
           )}
 
-          {(toolId === 'protect-pdf' || toolId === 'unlock-pdf') && (
+          {toolId === 'protect-pdf' && (
             <div className="glass-panel p-6 rounded-2xl space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  {toolId === 'protect-pdf' ? 'Set Encryption Password:' : 'Enter PDF Password (if required):'}
+                  Type a password to protect your PDF file:
                 </label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder={toolId === 'protect-pdf' ? "Enter password to protect PDF" : "Enter password to unlock PDF"}
+                    placeholder="Enter password"
+                    className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none focus:border-rose-500 pr-12"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Repeat password to protect your PDF file:
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Repeat password"
+                    className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none focus:border-rose-500 pr-12"
+                  />
+                </div>
+              </div>
+
+              {password && confirmPassword && (
+                <div className={`text-xs font-semibold flex items-center gap-1.5 ${password === confirmPassword ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {password === confirmPassword ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" /> Passwords match! PDF will be encrypted with 256-bit AES protection.
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="w-4 h-4" /> Passwords do not match.
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {toolId === 'unlock-pdf' && (
+            <div className="glass-panel p-6 rounded-2xl space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Enter current PDF password to unlock:
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password to unlock PDF"
                     className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none focus:border-rose-500 pr-12"
                   />
                   <button
