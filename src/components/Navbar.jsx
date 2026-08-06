@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TOOL_CATEGORIES } from '../data/toolsData';
 import {
-  Heart, ChevronDown, ChevronUp, Menu, X, Search,
+  Heart, ChevronDown, ChevronUp, Menu, X, Search, Layers,
   Files, Scissors, FileX, FileSpreadsheet, LayoutGrid, Scan,
   Minimize2, Wrench, FileText, Image, FileCode, Presentation,
   Table, Globe, FileImage, FileType, MonitorPlay, Grid,
@@ -98,16 +98,22 @@ export default function Navbar({ onHome, onSelectTool, searchQuery, setSearchQue
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
 
-          {/* Brand Logo - I ❤️ PDF Style */}
+          {/* Brand Logo - OmniPDF */}
           <div
             onClick={onHome}
-            className="flex items-center gap-2 cursor-pointer group flex-shrink-0"
+            className="flex items-center gap-2.5 cursor-pointer group flex-shrink-0"
           >
-            <span className="text-2xl font-black text-white tracking-tighter">I</span>
-            <div className="w-8 h-8 rounded-lg bg-rose-600 flex items-center justify-center shadow-md shadow-rose-600/40 group-hover:scale-110 transition-transform">
-              <Heart className="w-5 h-5 text-white fill-white animate-pulse" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-600 via-rose-500 to-amber-500 flex items-center justify-center shadow-lg shadow-rose-600/30 group-hover:scale-105 transition-transform">
+              <Layers className="w-5 h-5 text-white" />
             </div>
-            <span className="text-2xl font-black text-white tracking-tighter">PDF</span>
+            <div className="flex items-center">
+              <span className="font-extrabold text-2xl tracking-tight text-white">
+                Omni<span className="text-rose-500">PDF</span>
+              </span>
+              <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30 uppercase tracking-wider hidden sm:inline-block">
+                PRO
+              </span>
+            </div>
           </div>
 
           {/* Desktop Nav Links */}
