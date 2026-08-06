@@ -183,6 +183,7 @@ export default function UniversalToolEngine({ tool, onBack }) {
 
     setIsProcessing(true);
     setErrorMsg(null);
+    await new Promise(r => setTimeout(r, 600));
 
     try {
       let uploadedFileId = null;
