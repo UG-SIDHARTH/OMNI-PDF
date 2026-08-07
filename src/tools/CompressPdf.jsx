@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import FileUploader from '../components/FileUploader';
 import CountdownTimer from '../components/CountdownTimer';
+import { apiFetch } from '../utils/apiClient';
 import { Minimize2, Download, RefreshCw, AlertCircle, CheckCircle2, Sliders, TrendingDown } from 'lucide-react';
 
 export default function CompressPdf() {
@@ -28,7 +29,7 @@ export default function CompressPdf() {
       const formData = new FormData();
       formData.append('files', selectedFile);
 
-      const uploadRes = await fetch('/api/upload', {
+      const uploadRes = await apiFetch('/api/upload', {
         method: 'POST',
         body: formData,
       });
@@ -42,9 +43,8 @@ export default function CompressPdf() {
       const fileId = uploadData.files[0].fileId;
 
       // Step 2: Compress PDF
-      const compressRes = await fetch('/api/pdf/compress', {
+      const compressRes = await apiFetch('/api/pdf/compress', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileId, level: compressionLevel }),
       });
 

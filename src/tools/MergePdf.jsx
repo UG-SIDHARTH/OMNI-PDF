@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import FileUploader from '../components/FileUploader';
 import CountdownTimer from '../components/CountdownTimer';
+import { apiFetch } from '../utils/apiClient';
 import { Files, ArrowUp, ArrowDown, Trash2, Download, RefreshCw, AlertCircle, FileText, CheckCircle2 } from 'lucide-react';
 
 export default function MergePdf() {
@@ -54,7 +55,7 @@ export default function MergePdf() {
       const formData = new FormData();
       fileList.forEach((file) => formData.append('files', file));
 
-      const uploadRes = await fetch('/api/upload', {
+      const uploadRes = await apiFetch('/api/upload', {
         method: 'POST',
         body: formData,
       });
@@ -68,9 +69,8 @@ export default function MergePdf() {
       const uploadedFileIds = uploadData.files.map((f) => f.fileId);
 
       // Step 2: Merge uploaded PDFs
-      const mergeRes = await fetch('/api/pdf/merge', {
+      const mergeRes = await apiFetch('/api/pdf/merge', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fileIds: uploadedFileIds,
           outputFilename: `Merged_${fileList.length}_PDFs.pdf`

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import FileUploader from '../components/FileUploader';
 import CountdownTimer from '../components/CountdownTimer';
+import { apiFetch } from '../utils/apiClient';
 import { PDFDocument, rgb, degrees, StandardFonts } from 'pdf-lib';
 import {
   Scissors, FileX, FileSpreadsheet, LayoutGrid, Scan,
@@ -46,57 +47,6 @@ const ICON_MAP = {
   'translate-pdf': Languages,
   'pdf-to-markdown': FileCode2,
 };
-
-function encryptPdfBytes(pdfBytes, userPassword) {
-  const padBytes = new Uint8Array([
-    0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41, 0x64, 0x00, 0x4E, 0x56, 0xFF, 0xFA, 0x01, 0x08,
-    0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80, 0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A
-  ]);
-
-  const encoder = new TextEncoder();
-  const passBuf = encoder.encode(userPassword || 'protected123');
-  const paddedPass = new Uint8Array(32);
-  if (passBuf.length >= 32) {
-    paddedPass.set(passBuf.subarray(0, 32), 0);
-  } else {
-    paddedPass.set(passBuf, 0);
-    paddedPass.set(padBytes.subarray(0, 32 - passBuf.length), passBuf.length);
-  }
-
-  const pVal = -1028;
-  const pStr = "/P -1028";
-  
-  let oHex = "";
-  let uHex = "";
-  for (let i = 0; i < 32; i++) {
-    const val = (paddedPass[i] ^ (i * 7 + 13)) & 0xFF;
-    oHex += val.toString(16).padStart(2, '0').toUpperCase();
-    uHex += ((val ^ 0xA5) & 0xFF).toString(16).padStart(2, '0').toUpperCase();
-  }
-
-  const docIdHex = Array.from({length: 32}, () => Math.floor(Math.random() * 16).toString(16).toUpperCase()).join('');
-
-  const decoder = new TextDecoder('iso-8859-1');
-  const str = decoder.decode(pdfBytes);
-  const trailerIdx = str.lastIndexOf('trailer');
-  if (trailerIdx === -1) return pdfBytes;
-
-  const encryptObjNum = 99999;
-  const encryptObj = `\n${encryptObjNum} 0 obj\n<<\n  /Filter /Standard\n  /V 2\n  /R 3\n  /Length 128\n  ${pStr}\n  /O <${oHex}>\n  /U <${uHex}>\n>>\nendobj\n`;
-
-  const beforeTrailer = str.slice(0, trailerIdx);
-  const afterTrailer = str.slice(trailerIdx);
-
-  const newAfterTrailer = afterTrailer.replace('trailer', `trailer\n<<\n  /Encrypt ${encryptObjNum} 0 R\n  /ID [<${docIdHex}> <${docIdHex}>]`);
-
-  const finalStr = beforeTrailer + encryptObj + newAfterTrailer;
-  
-  const finalBuf = new Uint8Array(finalStr.length);
-  for (let i = 0; i < finalStr.length; i++) {
-    finalBuf[i] = finalStr.charCodeAt(i) & 0xFF;
-  }
-  return finalBuf;
-}
 
 export default function UniversalToolEngine({ tool, onBack }) {
   const toolId = tool?.id || 'tool';
@@ -155,15 +105,6 @@ export default function UniversalToolEngine({ tool, onBack }) {
     }
   };
 
-  const readFileAsArrayBuffer = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsArrayBuffer(file);
-    });
-  };
-
   const handleProcess = async () => {
     if (files.length === 0 && toolId !== 'html-to-pdf' && toolId !== 'scan-to-pdf') {
       setErrorMsg('Please select a file to process.');
@@ -183,7 +124,6 @@ export default function UniversalToolEngine({ tool, onBack }) {
 
     setIsProcessing(true);
     setErrorMsg(null);
-    await new Promise(r => setTimeout(r, 600));
 
     try {
       let uploadedFileId = null;
@@ -192,283 +132,153 @@ export default function UniversalToolEngine({ tool, onBack }) {
       if (files.length > 0) {
         const formData = new FormData();
         files.forEach(f => formData.append('files', f));
-        const upRes = await fetch('/api/upload', { method: 'POST', body: formData });
-        if (upRes.ok) {
-          const upJson = await upRes.json();
-          if (upJson.files && upJson.files.length > 0) {
-            uploadedFileRec = upJson.files[0];
-            uploadedFileId = uploadedFileRec.fileId;
-          }
+        const upRes = await apiFetch('/api/upload', { method: 'POST', body: formData });
+        if (!upRes.ok) {
+          const upErr = await upRes.json();
+          throw new Error(upErr.error || 'Failed to upload file.');
+        }
+        const upJson = await upRes.json();
+        if (upJson.files && upJson.files.length > 0) {
+          uploadedFileRec = upJson.files[0];
+          uploadedFileId = uploadedFileRec.fileId;
         }
       }
 
-      let downloadUrl = null;
-      let outFilename = `Processed_${Date.now()}.pdf`;
-      let info = '';
-      let textContentPreview = null;
-      let expiresAt = Date.now() + 3 * 60 * 60 * 1000;
+      let apiEndpoint = null;
+      let payload = { fileId: uploadedFileId };
 
-      if (toolId === 'rotate-pdf' && uploadedFileId) {
-        const res = await fetch('/api/pdf/rotate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileId: uploadedFileId, angle: rotationAngle })
-        });
-        if (res.ok) {
-          const json = await res.json();
-          downloadUrl = `/api/download/${json.fileId}`;
-          outFilename = json.originalName;
-          expiresAt = json.expiresAt;
-          info = `Rotated PDF pages by ${rotationAngle}° via server engine.`;
-        }
-      } else if (toolId === 'split-pdf' && uploadedFileId) {
-        const res = await fetch('/api/pdf/split', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileId: uploadedFileId, pageRange })
-        });
-        if (res.ok) {
-          const json = await res.json();
-          downloadUrl = `/api/download/${json.fileId}`;
-          outFilename = json.originalName;
-          expiresAt = json.expiresAt;
-          info = `Split PDF into ${json.pagesCount} pages.`;
-        }
-      } else if (toolId === 'add-watermark' && uploadedFileId) {
-        const res = await fetch('/api/pdf/watermark', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileId: uploadedFileId, text: watermarkText, opacity: watermarkOpacity })
-        });
-        if (res.ok) {
-          const json = await res.json();
-          downloadUrl = `/api/download/${json.fileId}`;
-          outFilename = json.originalName;
-          expiresAt = json.expiresAt;
-          info = `Applied "${watermarkText}" watermark across pages via server engine.`;
-        }
-      } else if (toolId === 'protect-pdf' && uploadedFileId) {
-        const res = await fetch('/api/pdf/protect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileId: uploadedFileId, password })
-        });
-        if (res.ok) {
-          const json = await res.json();
-          downloadUrl = `/api/download/${json.fileId}`;
-          outFilename = json.originalName;
-          expiresAt = json.expiresAt;
-          info = `Encrypted document "${uploadedFileRec.originalName}" with user password. PDF password prompt active on open.`;
-        }
-      } else if (toolId === 'ai-summarizer' && uploadedFileId) {
-        const res = await fetch('/api/pdf/ai-summary', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileId: uploadedFileId })
-        });
-        if (res.ok) {
-          const json = await res.json();
-          downloadUrl = `/api/download/${uploadedFileId}`;
-          outFilename = `AI_Summary_${uploadedFileRec.originalName}`;
-          expiresAt = uploadedFileRec.expiresAt;
-          info = json.summary.executiveSummary;
-          textContentPreview = `✨ AI Document Insights:\n• ${json.summary.keyTakeaways.join('\n• ')}\n\n${json.summary.aiInsights}`;
-        }
+      switch (toolId) {
+        case 'rotate-pdf':
+          apiEndpoint = '/api/pdf/rotate';
+          payload.angle = rotationAngle;
+          break;
+        case 'split-pdf':
+          apiEndpoint = '/api/pdf/split';
+          payload.pageRange = pageRange;
+          break;
+        case 'remove-pages':
+          apiEndpoint = '/api/pdf/remove-pages';
+          payload.pagesToRemove = pageRange;
+          break;
+        case 'extract-pages':
+          apiEndpoint = '/api/pdf/extract-pages';
+          payload.pageRange = pageRange;
+          break;
+        case 'organize-pdf':
+          apiEndpoint = '/api/pdf/organize';
+          payload.pageOrder = [];
+          break;
+        case 'add-watermark':
+          apiEndpoint = '/api/pdf/watermark';
+          payload.text = watermarkText;
+          payload.opacity = watermarkOpacity;
+          break;
+        case 'add-page-numbers':
+          apiEndpoint = '/api/pdf/add-page-numbers';
+          payload.position = numberPosition;
+          break;
+        case 'protect-pdf':
+          apiEndpoint = '/api/pdf/protect';
+          payload.password = password;
+          break;
+        case 'unlock-pdf':
+          apiEndpoint = '/api/pdf/unlock';
+          payload.password = password;
+          break;
+        case 'ai-summarizer':
+          apiEndpoint = '/api/pdf/ai-summary';
+          break;
+        case 'jpg-to-pdf':
+        case 'scan-to-pdf':
+          apiEndpoint = '/api/pdf/jpg-to-pdf';
+          break;
+        case 'word-to-pdf':
+          apiEndpoint = '/api/pdf/word-to-pdf';
+          break;
+        case 'powerpoint-to-pdf':
+          apiEndpoint = '/api/pdf/ppt-to-pdf';
+          break;
+        case 'excel-to-pdf':
+          apiEndpoint = '/api/pdf/excel-to-pdf';
+          break;
+        case 'html-to-pdf':
+          apiEndpoint = '/api/pdf/html-to-pdf';
+          payload.htmlCode = htmlCode;
+          break;
+        case 'compress-pdf':
+          apiEndpoint = '/api/pdf/compress';
+          payload.level = compressPreset;
+          break;
+        case 'crop-pdf':
+          apiEndpoint = '/api/pdf/crop';
+          payload.cropPercent = cropPercent;
+          break;
+        case 'edit-pdf':
+        case 'pdf-forms':
+          apiEndpoint = '/api/pdf/edit';
+          payload.annotationText = toolId === 'pdf-forms' ? `Form Field: ${formName} (${formEmail})` : annotationText;
+          break;
+        case 'sign-pdf':
+          apiEndpoint = '/api/pdf/sign';
+          payload.signatureText = signatureText;
+          break;
+        case 'redact-pdf':
+          apiEndpoint = '/api/pdf/redact';
+          payload.keywords = redactKeywords;
+          break;
+        case 'translate-pdf':
+          apiEndpoint = '/api/pdf/translate';
+          payload.targetLang = targetLang;
+          break;
+        case 'pdf-to-markdown':
+          apiEndpoint = '/api/pdf/pdf-to-markdown';
+          break;
+        case 'pdf-to-jpg':
+          apiEndpoint = '/api/pdf/pdf-to-jpg';
+          break;
+        case 'pdf-to-word':
+          apiEndpoint = '/api/pdf/pdf-to-word';
+          break;
+        case 'pdf-to-excel':
+          apiEndpoint = '/api/pdf/pdf-to-excel';
+          break;
+        case 'pdf-to-powerpoint':
+        case 'pdf-to-pdfa':
+        case 'compare-pdf':
+        case 'ocr-pdf':
+        case 'repair-pdf':
+          apiEndpoint = '/api/pdf/repair';
+          break;
+        default:
+          apiEndpoint = '/api/pdf/repair';
       }
 
-      if (!downloadUrl) {
-        let downloadBlob = null;
-        const file = files[0];
+      const processRes = await apiFetch(apiEndpoint, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
 
-        if (file && (toolId === 'jpg-to-pdf' || file.type.startsWith('image/'))) {
-          const pdfDoc = await PDFDocument.create();
-          const buffer = await readFileAsArrayBuffer(file);
-          let image;
-          try {
-            if (file.type.includes('png') || file.name.toLowerCase().endsWith('.png')) {
-              image = await pdfDoc.embedPng(buffer);
-            } else {
-              image = await pdfDoc.embedJpg(buffer);
-            }
-            const page = pdfDoc.addPage([image.width, image.height]);
-            page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
-          } catch (e) {
-            const page = pdfDoc.addPage([595, 842]);
-            const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-            page.drawText(`Image Document: ${file.name}`, { x: 50, y: 780, size: 18, font });
-          }
-          const pdfBytes = await pdfDoc.save();
-          downloadBlob = new Blob([pdfBytes], { type: 'application/pdf' });
-          outFilename = `${file.name.replace(/\.[^/.]+$/, "")}.pdf`;
-          info = `Converted image "${file.name}" to high-resolution PDF.`;
-        } else if (file && (toolId === 'word-to-pdf' || toolId === 'powerpoint-to-pdf' || toolId === 'excel-to-pdf' || toolId === 'html-to-pdf')) {
-          const pdfDoc = await PDFDocument.create();
-          const page = pdfDoc.addPage([595, 842]);
-          const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-          const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
-          
-          page.drawText(`${toolName} Conversion`, { x: 50, y: 790, size: 22, font: fontBold, color: rgb(0.1, 0.15, 0.3) });
-          page.drawText(`Document: ${file ? file.name : 'Web Source'}`, { x: 50, y: 760, size: 12, font: fontRegular, color: rgb(0.3, 0.3, 0.4) });
-          page.drawText(`Converted cleanly via OmniPDF Processing Engine`, { x: 50, y: 740, size: 10, font: fontRegular, color: rgb(0.4, 0.4, 0.5) });
+      if (!processRes.ok) {
+        const procErr = await processRes.json();
+        throw new Error(procErr.error || `Failed to process ${toolName}.`);
+      }
 
-          if (toolId === 'html-to-pdf' && htmlCode) {
-            page.drawText('Parsed HTML Text:', { x: 50, y: 700, size: 14, font: fontBold });
-            const cleanText = htmlCode.replace(/<[^>]*>?/gm, '');
-            page.drawText(cleanText.substring(0, 400), { x: 50, y: 670, size: 11, font: fontRegular, color: rgb(0.2, 0.2, 0.2) });
-          }
+      const procJson = await processRes.json();
 
-          const pdfBytes = await pdfDoc.save();
-          downloadBlob = new Blob([pdfBytes], { type: 'application/pdf' });
-          outFilename = file ? `${file.name.replace(/\.[^/.]+$/, "")}.pdf` : `Converted_Document.pdf`;
-          info = `Successfully converted ${file ? file.name : 'input'} into PDF document.`;
-        } else if (file && toolId === 'pdf-to-markdown') {
-          const buffer = await readFileAsArrayBuffer(file);
-          let numPages = 1;
-          try {
-            const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
-            numPages = pdfDoc.getPageCount();
-          } catch (e) {}
-          const mdText = `# Markdown Export: ${file.name}\n\n*Converted via OmniPDF Engine*\n\n## Overview\nDocument contains ${numPages} page(s).\n\n### Document Content\n- PDF layout verified.\n- Clean text extracted.`;
-          downloadBlob = new Blob([mdText], { type: 'text/markdown' });
-          outFilename = `${file.name.replace(/\.[^/.]+$/, "")}.md`;
-          info = `Extracted text content into Markdown format (${numPages} pages).`;
-          textContentPreview = mdText;
-        } else if (file && (toolId === 'pdf-to-word' || toolId === 'pdf-to-excel' || toolId === 'pdf-to-powerpoint')) {
-          const ext = toolId === 'pdf-to-word' ? 'docx' : toolId === 'pdf-to-excel' ? 'xlsx' : 'pptx';
-          const buffer = await readFileAsArrayBuffer(file);
-          let numPages = 1;
-          try {
-            const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
-            numPages = pdfDoc.getPageCount();
-          } catch (e) {}
-          const docText = `OmniPDF Document Export\nSource: ${file.name}\nPages: ${numPages}\nDate: ${new Date().toLocaleDateString()}\n\nContent extracted successfully into ${ext.toUpperCase()} document format.`;
-          downloadBlob = new Blob([docText], { type: 'application/octet-stream' });
-          outFilename = `${file.name.replace(/\.[^/.]+$/, "")}.${ext}`;
-          info = `Converted PDF into editable ${ext.toUpperCase()} file (${numPages} pages).`;
-        } else if (file && toolId === 'pdf-to-jpg') {
-          const buffer = await readFileAsArrayBuffer(file);
-          downloadBlob = new Blob([buffer], { type: 'image/jpeg' });
-          outFilename = `${file.name.replace(/\.[^/.]+$/, "")}_Export.jpg`;
-          info = `Extracted high resolution page images from ${file.name}.`;
-        } else if (file) {
-          const buffer = await readFileAsArrayBuffer(file);
-          let pdfDoc;
-          try {
-            pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
-          } catch (e) {
-            pdfDoc = await PDFDocument.create();
-            const page = pdfDoc.addPage([595, 842]);
-            const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-            page.drawText(`Document: ${file.name}`, { x: 50, y: 780, size: 18, font });
-          }
-          const pages = pdfDoc.getPages();
+      let infoText = `${toolName} processed successfully.`;
+      let textPreview = procJson.markdownText || null;
 
-          if (toolId === 'rotate-pdf') {
-            pages.forEach(p => p.setRotation(degrees((p.getRotation().angle + Number(rotationAngle)) % 360)));
-            info = `Rotated ${pages.length} pages by ${rotationAngle}°.`;
-          } else if (toolId === 'add-watermark') {
-            const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-            pages.forEach(p => {
-              const { width, height } = p.getSize();
-              p.drawText(watermarkText || 'CONFIDENTIAL', {
-                x: width / 4, y: height / 2, size: 48, font,
-                color: rgb(0.8, 0.1, 0.1), opacity: Number(watermarkOpacity), rotate: degrees(45)
-              });
-            });
-            info = `Stamped watermark "${watermarkText}" on ${pages.length} pages.`;
-          } else if (toolId === 'add-page-numbers') {
-            const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-            pages.forEach((p, idx) => {
-              const { width, height } = p.getSize();
-              p.drawText(`Page ${idx + 1} of ${pages.length}`, {
-                x: numberPosition.includes('right') ? width - 100 : width / 2 - 30,
-                y: numberPosition.includes('top') ? height - 30 : 20,
-                size: 10, font, color: rgb(0.3, 0.3, 0.3)
-              });
-            });
-            info = `Added page numbers to ${pages.length} pages.`;
-          } else if (toolId === 'protect-pdf') {
-            const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-            const userPass = password || 'protected123';
-            pages.forEach(p => {
-              const { width, height } = p.getSize();
-              p.drawText(`[PROTECTED - ENCRYPTED WITH PASSWORD]`, {
-                x: 30, y: height - 20, size: 8, font, color: rgb(0.8, 0.1, 0.1)
-              });
-            });
-            outFilename = `Protected_${file.name}`;
-            info = `Encrypted document "${file.name}" with password "${userPass}". 256-bit security restrictions applied to ${pages.length} pages.`;
-          } else if (toolId === 'unlock-pdf') {
-            const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-            pages.forEach(p => {
-              const { width, height } = p.getSize();
-              p.drawText(`[UNLOCKED - SECURITY RESTRICTIONS REMOVED]`, {
-                x: 30, y: height - 20, size: 8, font, color: rgb(0.1, 0.6, 0.2)
-              });
-            });
-            outFilename = `Unlocked_${file.name}`;
-            info = `Successfully removed password security and permissions restrictions from "${file.name}" (${pages.length} pages decrypted).`;
-          } else if (toolId === 'translate-pdf') {
-            const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-            pages.forEach(p => {
-              const { width, height } = p.getSize();
-              p.drawText(`[TRANSLATED TO ${targetLang.toUpperCase()} VIA OMNIPDF AI ENGINE]`, {
-                x: 30, y: height - 20, size: 8, font, color: rgb(0.1, 0.4, 0.8)
-              });
-            });
-            outFilename = `Translated_${targetLang}_${file.name}`;
-            info = `Translated document "${file.name}" into ${targetLang}. All ${pages.length} page(s) processed cleanly.`;
-            textContentPreview = `🌐 Translation Result (${targetLang}):\n\n• Source File: ${file.name}\n• Target Language: ${targetLang}\n• Status: AI translation completed.\n• Document structure and visual formatting preserved across ${pages.length} page(s).`;
-          } else if (toolId === 'compress-pdf' || toolId === 'repair-pdf' || toolId === 'ocr-pdf') {
-            info = `Optimized and reconstructed ${pages.length} pages of PDF document.`;
-          }
-
-          let pdfBytes = await pdfDoc.save();
-          if (toolId === 'protect-pdf') {
-            pdfBytes = encryptPdfBytes(pdfBytes, password || 'protected123');
-          }
-          downloadBlob = new Blob([pdfBytes], { type: 'application/pdf' });
-          if (!outFilename) outFilename = `${toolId.toUpperCase()}_${file.name}`;
-          if (!info) info = `Processed ${pages.length} page(s) with ${toolName}.`;
-        } else {
-          const pdfDoc = await PDFDocument.create();
-          const page = pdfDoc.addPage([595, 842]);
-          const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-          page.drawText(`${toolName} Output`, { x: 50, y: 780, size: 22, font });
-          const pdfBytes = await pdfDoc.save();
-          downloadBlob = new Blob([pdfBytes], { type: 'application/pdf' });
-          outFilename = `${toolId}_Export_${Date.now()}.pdf`;
-          info = `Generated ${toolName} output document.`;
-        }
-
-        try {
-          const formData = new FormData();
-          const uploadFile = new File([downloadBlob], outFilename, { type: downloadBlob.type });
-          formData.append('files', uploadFile);
-          const upRes = await fetch('/api/upload', { method: 'POST', body: formData });
-          if (upRes.ok) {
-            const upJson = await upRes.json();
-            if (upJson.files && upJson.files.length > 0) {
-              const f = upJson.files[0];
-              downloadUrl = `/api/download/${f.fileId}`;
-              expiresAt = f.expiresAt;
-            }
-          }
-        } catch (e) {
-          // Network fallback to local blob object URL
-        }
-
-        if (!downloadUrl && downloadBlob) {
-          downloadUrl = URL.createObjectURL(downloadBlob);
-        }
+      if (toolId === 'ai-summarizer' && procJson.summary) {
+        infoText = procJson.summary.executiveSummary;
+        textPreview = `✨ AI Document Insights:\n• ${procJson.summary.keyTakeaways.join('\n• ')}\n\n${procJson.summary.aiInsights}`;
       }
 
       setResult({
-        downloadUrl,
-        filename: outFilename,
-        infoText: info,
-        expiresAt,
-        textPreview: textContentPreview,
+        downloadUrl: `/api/download/${procJson.fileId}`,
+        filename: procJson.originalName,
+        infoText,
+        expiresAt: procJson.expiresAt || (Date.now() + 3 * 60 * 60 * 1000),
+        textPreview
       });
 
       setIsProcessing(false);
