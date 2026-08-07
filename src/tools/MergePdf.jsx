@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import FileUploader from '../components/FileUploader';
 import CountdownTimer from '../components/CountdownTimer';
-import { apiFetch } from '../utils/apiClient';
+import { apiFetch, downloadFile } from '../utils/apiClient';
 import { Files, ArrowUp, ArrowDown, Trash2, Download, RefreshCw, AlertCircle, FileText, CheckCircle2 } from 'lucide-react';
 
 export default function MergePdf() {
@@ -234,13 +234,12 @@ export default function MergePdf() {
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
-            <a
-              href={`/api/download/${resultData.fileId}`}
-              download={resultData.originalName}
+            <button
+              onClick={() => downloadFile(resultData.fileId, resultData.originalName)}
               className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-bold text-sm shadow-lg shadow-rose-600/25 flex items-center gap-2 transition"
             >
               <Download className="w-5 h-5" /> Download Merged PDF
-            </a>
+            </button>
 
             <button
               onClick={resetAll}

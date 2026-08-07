@@ -35,3 +35,27 @@ export async function apiFetch(endpoint, options = {}) {
 
   return response;
 }
+
+export async function downloadFile(fileId, filename = 'document.pdf') {
+  try {
+    const res = await apiFetch(`/api/download/${fileId}`);
+    if (!res.ok) {
+      throw new Error('Download link expired or file not found.');
+    }
+
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+  } catch (err) {
+    console.error('Download error:', err);
+    alert('Failed to download file: ' + err.message);
+  }
+}

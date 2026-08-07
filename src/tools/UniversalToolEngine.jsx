@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import FileUploader from '../components/FileUploader';
 import CountdownTimer from '../components/CountdownTimer';
-import { apiFetch } from '../utils/apiClient';
+import { apiFetch, downloadFile } from '../utils/apiClient';
 import { PDFDocument, rgb, degrees, StandardFonts } from 'pdf-lib';
 import {
   Scissors, FileX, FileSpreadsheet, LayoutGrid, Scan,
@@ -274,6 +274,7 @@ export default function UniversalToolEngine({ tool, onBack }) {
       }
 
       setResult({
+        fileId: procJson.fileId,
         downloadUrl: `/api/download/${procJson.fileId}`,
         filename: procJson.originalName,
         infoText,
@@ -297,13 +298,24 @@ export default function UniversalToolEngine({ tool, onBack }) {
     }
   };
 
-  const handleAskAi = () => {
-    if (!aiQuestion.trim()) return;
-    setAiAnswers((prev) => [
-      ...prev,
-      { question: aiQuestion, answer: `Document context result: "${aiQuestion}" is verified against active PDF security rules.` }
-    ]);
+  const handleAskAi = async () => {
+    if (!aiQuestion.trim() || !result?.fileId) return;
+    const currentQ = aiQuestion;
     setAiQuestion('');
+    try {
+      const res = await apiFetch('/api/pdf/ai-qa', {
+        method: 'POST',
+        body: JSON.stringify({ fileId: result.fileId, question: currentQ })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setAiAnswers((prev) => [...prev, { question: json.question, answer: json.answer }]);
+      } else {
+        setAiAnswers((prev) => [...prev, { question: currentQ, answer: 'Could not analyze document question.' }]);
+      }
+    } catch (e) {
+      setAiAnswers((prev) => [...prev, { question: currentQ, answer: 'Error analyzing question.' }]);
+    }
   };
 
   return (
@@ -759,13 +771,12 @@ export default function UniversalToolEngine({ tool, onBack }) {
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
-            <a
-              href={result.downloadUrl}
-              download={result.filename}
+            <button
+              onClick={() => downloadFile(result.fileId, result.filename)}
               className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-bold text-sm shadow-lg shadow-rose-600/25 flex items-center gap-2 transition"
             >
               <Download className="w-5 h-5" /> Download {result.filename}
-            </a>
+            </button>
 
             {result.textPreview && (
               <button
