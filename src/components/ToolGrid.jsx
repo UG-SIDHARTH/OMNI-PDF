@@ -88,13 +88,14 @@ export default function ToolGrid({ searchQuery, onSelectTool }) {
                       </div>
 
                       {/* Status Badges */}
-                      {tool.isWorking ? (
+                      {tool.isWorking !== false ? (
                         <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold tracking-wider uppercase flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                           {tool.badge || 'Ready'}
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-slate-400 text-[10px] font-medium">
+                        <span className="px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-bold tracking-wider uppercase flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                           Coming Soon
                         </span>
                       )}
@@ -111,7 +112,7 @@ export default function ToolGrid({ searchQuery, onSelectTool }) {
                   </div>
 
                   <div className="pt-4 mt-2 border-t border-slate-800/40 flex items-center justify-between text-xs text-slate-400 group-hover:text-slate-200 transition">
-                    <span>{tool.isWorking ? 'Launch Tool' : 'Preview Module'}</span>
+                    <span>{tool.isWorking !== false ? 'Launch Tool' : 'Preview Module'}</span>
                     <Icons.ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
                   </div>
                 </div>

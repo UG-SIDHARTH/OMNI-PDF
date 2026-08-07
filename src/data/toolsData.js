@@ -293,25 +293,27 @@ export const TOOL_CATEGORIES = [
         name: 'AI Summarizer',
         description: 'Generate concise summaries, key points, and Q&A from long PDFs.',
         icon: 'Sparkles',
-        isWorking: true,
+        isWorking: false,
         accept: '.pdf',
-        badge: 'AI Powered'
+        badge: 'Coming Soon'
       },
       {
         id: 'translate-pdf',
         name: 'Translate PDF',
         description: 'Translate full PDF documents into over 50 languages instantly.',
         icon: 'Languages',
-        isWorking: true,
-        accept: '.pdf'
+        isWorking: false,
+        accept: '.pdf',
+        badge: 'Coming Soon'
       },
       {
         id: 'pdf-to-markdown',
         name: 'PDF to Markdown',
         description: 'Convert PDF content into clean Markdown format for developers & LLMs.',
         icon: 'FileCode2',
-        isWorking: true,
-        accept: '.pdf'
+        isWorking: false,
+        accept: '.pdf',
+        badge: 'Coming Soon'
       }
     ]
   },

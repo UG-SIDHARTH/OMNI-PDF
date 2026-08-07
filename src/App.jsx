@@ -5,6 +5,7 @@ import BackgroundRemover from './tools/BackgroundRemover';
 import MergePdf from './tools/MergePdf';
 import CompressPdf from './tools/CompressPdf';
 import UniversalToolEngine from './tools/UniversalToolEngine';
+import ComingSoonTool from './tools/ComingSoonTool';
 import { TOOL_CATEGORIES } from './data/toolsData';
 import { ShieldCheck, Heart, Lock, Clock, Zap, RefreshCw } from 'lucide-react';
 
@@ -86,6 +87,12 @@ export default function App() {
           {!activeToolId ? (
             <ToolGrid
               searchQuery={searchQuery}
+              onSelectTool={handleSelectTool}
+            />
+          ) : activeTool && activeTool.isWorking === false ? (
+            <ComingSoonTool
+              tool={activeTool}
+              onBack={handleGoHome}
               onSelectTool={handleSelectTool}
             />
           ) : activeToolId === 'background-remover' ? (

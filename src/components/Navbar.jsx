@@ -262,8 +262,13 @@ export default function Navbar({ onHome, onSelectTool, searchQuery, setSearchQue
                           <span className={`p-1.5 rounded-lg border flex-shrink-0 group-hover:scale-110 transition-transform ${categoryColor}`}>
                             {getToolIcon(tool.id)}
                           </span>
-                          <span className="truncate group-hover:text-rose-400 transition-colors">
-                            {tool.name}
+                          <span className="truncate group-hover:text-rose-400 transition-colors flex-1 flex items-center justify-between">
+                            <span>{tool.name}</span>
+                            {tool.isWorking === false && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 uppercase tracking-wider ml-1">
+                                SOON
+                              </span>
+                            )}
                           </span>
                         </button>
                       </li>
