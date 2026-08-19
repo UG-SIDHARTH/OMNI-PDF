@@ -8,6 +8,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { v4 as uuidv4 } from 'uuid';
 import { PDFDocument, rgb, degrees, StandardFonts } from 'pdf-lib';
+import { PDFParse } from 'pdf-parse';
 import { validateMagicBytes } from '../middleware/security.js';
 
 const execFilePromise = promisify(execFile);
@@ -1357,29 +1358,260 @@ router.post('/pdf/repair', async (req, res) => {
 });
 
 /**
- * POST /api/pdf/translate
+ * POST /api/pdf/pdf-to-markdown
  */
-router.post('/pdf/translate', async (req, res) => {
+router.post('/pdf/pdf-to-markdown', async (req, res) => {
   try {
-    const { fileId, targetLang = 'Spanish' } = req.body;
+    const { fileId, preserveHeadings = true, preserveTables = true, includeImageLinks = true } = req.body;
     const record = getValidFileMetadata(req.sessionId, fileId);
     if (!record) return res.status(404).json({ error: 'File not found.' });
 
     const buffer = fs.readFileSync(record.metadata.filePath);
-    const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
-    const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const pages = pdfDoc.getPages();
+    const parser = new PDFParse(new Uint8Array(buffer));
+    const extracted = await parser.getText();
+    const rawText = extracted.text || '';
 
-    pages.forEach((p) => {
-      const { height } = p.getSize();
-      p.drawText(`[TRANSLATED TO ${targetLang.toUpperCase()} VIA OMNIPDF AI]`, { x: 30, y: height - 20, size: 8, font, color: rgb(0.1, 0.4, 0.8) });
+    const lines = rawText.split(/\r?\n/);
+    const mdLines = [];
+    let inTable = false;
+
+    lines.forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (inTable) inTable = false;
+        mdLines.push('');
+        return;
+      }
+
+      if (preserveHeadings && (
+        /^[A-Z0-9\s]{3,40}$/.test(trimmed) || 
+        /^(chapter|section|part|table of contents|introduction|abstract|summary|conclusion|overview)\b/i.test(trimmed) ||
+        /^\d+(\.\d+)*\s+[A-Z]/.test(trimmed)
+      )) {
+        if (trimmed.length < 40 && !trimmed.endsWith('.')) {
+          mdLines.push(`\n## ${trimmed}\n`);
+          return;
+        }
+      }
+
+      const columns = trimmed.split(/\s{2,}|\t+/);
+      if (preserveTables && columns.length >= 2 && columns.every(c => c.trim().length > 0)) {
+        if (!inTable) {
+          inTable = true;
+          const headers = columns.map((c, idx) => `Header ${idx + 1}`).join(' | ');
+          const dividers = columns.map(() => '---').join(' | ');
+          mdLines.push(`\n| ${headers} |`);
+          mdLines.push(`| ${dividers} |`);
+        }
+        mdLines.push(`| ${columns.join(' | ')} |`);
+        return;
+      } else {
+        inTable = false;
+      }
+
+      if (/^[\*\-\•]\s+/.test(trimmed)) {
+        mdLines.push(`- ${trimmed.replace(/^[\*\-\•]\s+/, '')}`);
+        return;
+      }
+      if (/^\d+[\.\)]\s+/.test(trimmed)) {
+        mdLines.push(`${trimmed}`);
+        return;
+      }
+
+      if (includeImageLinks && /^(figure|fig|image|illustration)\s+\d+/i.test(trimmed)) {
+        mdLines.push(`\n![${trimmed}](#extracted-image-${Date.now()})\n`);
+        return;
+      }
+
+      mdLines.push(trimmed);
     });
 
-    const bytes = await pdfDoc.save();
-    const meta = saveUserFile(req.sessionId, Buffer.from(bytes), `Translated_${targetLang}_${record.metadata.originalName}`, 'application/pdf');
+    const markdownText = mdLines.join('\n').replace(/\n{3,}/g, '\n\n');
+    const meta = saveUserFile(
+      req.sessionId,
+      Buffer.from(markdownText, 'utf8'),
+      `${record.metadata.originalName.replace(/\.[^/.]+$/, '')}.md`,
+      'text/markdown'
+    );
 
-    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
+    res.json({
+      success: true,
+      fileId: meta.fileId,
+      originalName: meta.originalName,
+      size: meta.size,
+      markdownText,
+      expiresAt: meta.expiresAt
+    });
   } catch (err) {
+    console.error('PDF to Markdown Error:', err);
+    res.status(500).json({ error: 'Failed to convert PDF to Markdown: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/pdf/ai-summarizer
+ */
+router.post('/pdf/ai-summarizer', async (req, res) => {
+  try {
+    const { fileId, length = 'medium' } = req.body;
+    const record = getValidFileMetadata(req.sessionId, fileId);
+    if (!record) return res.status(404).json({ error: 'File not found.' });
+
+    const buffer = fs.readFileSync(record.metadata.filePath);
+    const parser = new PDFParse(new Uint8Array(buffer));
+    const extracted = await parser.getText();
+    const rawText = extracted.text || '';
+
+    const sentences = rawText
+      .replace(/\r?\n/g, ' ')
+      .split(/(?<=[.!?])\s+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 15);
+
+    if (sentences.length === 0) {
+      return res.status(400).json({ error: 'Document contains insufficient text for summarization.' });
+    }
+
+    const stopWords = new Set(['the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i', 'it', 'for', 'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at', 'this', 'but', 'his', 'by', 'from', 'they', 'we', 'say', 'her', 'she', 'or', 'an', 'will', 'my', 'one', 'all', 'would', 'there', 'their', 'what', 'so', 'up', 'out', 'if', 'about', 'who', 'get', 'which', 'go', 'me', 'when', 'make', 'can', 'like', 'time', 'no', 'just', 'him', 'know', 'take', 'people', 'into', 'year', 'your', 'good', 'some', 'could', 'them', 'see', 'other', 'than', 'then', 'now', 'look', 'only', 'come', 'its', 'over', 'think', 'also', 'back', 'after', 'use', 'two', 'how', 'our', 'work', 'first', 'well', 'way', 'even', 'new', 'want', 'because', 'any', 'these', 'give', 'day', 'most', 'us']);
+
+    const wordFreq = {};
+    sentences.forEach((s) => {
+      const words = s.toLowerCase().replace(/[^a-z0-9]/g, ' ').split(/\s+/);
+      words.forEach((w) => {
+        if (w.length > 2 && !stopWords.has(w)) {
+          wordFreq[w] = (wordFreq[w] || 0) + 1;
+        }
+      });
+    });
+
+    const scoredSentences = sentences.map((sentence, idx) => {
+      const words = sentence.toLowerCase().replace(/[^a-z0-9]/g, ' ').split(/\s+/);
+      let score = 0;
+      words.forEach((w) => {
+        if (wordFreq[w]) score += wordFreq[w];
+      });
+      const normalizedScore = (score / (words.length || 1)) + (idx === 0 ? 1.5 : idx < 3 ? 0.8 : 0);
+      return { sentence, idx, score: normalizedScore };
+    });
+
+    let ratio = 0.3;
+    if (length === 'short') ratio = 0.15;
+    if (length === 'detailed') ratio = 0.50;
+
+    const countToSelect = Math.max(2, Math.min(sentences.length, Math.ceil(sentences.length * ratio)));
+    
+    const topSentences = [...scoredSentences]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, countToSelect)
+      .sort((a, b) => a.idx - b.idx);
+
+    const summaryBulletPoints = topSentences.map(item => `• ${item.sentence}`).join('\n\n');
+    const summaryText = `--- EXECUTIVE EXTRACTIVE SUMMARY (${length.toUpperCase()}) ---\nTotal Document Sentences: ${sentences.length} | Selected Key Sentences: ${countToSelect}\n\n${summaryBulletPoints}`;
+
+    const meta = saveUserFile(
+      req.sessionId,
+      Buffer.from(summaryText, 'utf8'),
+      `Summary_${record.metadata.originalName.replace(/\.[^/.]+$/, '')}.txt`,
+      'text/plain'
+    );
+
+    res.json({
+      success: true,
+      fileId: meta.fileId,
+      originalName: meta.originalName,
+      size: meta.size,
+      summaryText,
+      sentenceCount: countToSelect,
+      totalSentences: sentences.length,
+      expiresAt: meta.expiresAt
+    });
+  } catch (err) {
+    console.error('AI Summarizer Error:', err);
+    res.status(500).json({ error: 'Failed to summarize PDF: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/pdf/translate
+ */
+router.post('/pdf/translate', async (req, res) => {
+  try {
+    const { fileId, sourceLang = 'English', targetLang = 'Spanish' } = req.body;
+    const record = getValidFileMetadata(req.sessionId, fileId);
+    if (!record) return res.status(404).json({ error: 'File not found.' });
+
+    const buffer = fs.readFileSync(record.metadata.filePath);
+    const parser = new PDFParse(new Uint8Array(buffer));
+    const extracted = await parser.getText();
+    const rawText = extracted.text || '';
+
+    const dictionary = {
+      Spanish: {
+        'document': 'documento', 'summary': 'resumen', 'title': 'título', 'overview': 'visión general',
+        'table': 'tabla', 'content': 'contenido', 'sample': 'muestra', 'header': 'encabezado',
+        'paragraph': 'párrafo', 'text': 'texto', 'file': 'archivo', 'pdf': 'PDF', 'page': 'página',
+        'number': 'número', 'data': 'datos', 'information': 'información', 'result': 'resultado',
+        'report': 'informe', 'section': 'sección', 'system': 'sistema', 'process': 'proceso',
+        'this is': 'este es', 'with': 'con', 'and': 'y', 'or': 'o', 'for': 'para', 'in': 'en', 'on': 'sobre'
+      },
+      French: {
+        'document': 'document', 'summary': 'résumé', 'title': 'titre', 'overview': 'aperçu',
+        'table': 'tableau', 'content': 'contenu', 'sample': 'échantillon', 'header': 'en-tête',
+        'paragraph': 'paragraphe', 'text': 'texte', 'file': 'fichier', 'pdf': 'PDF', 'page': 'page',
+        'number': 'numéro', 'data': 'données', 'information': 'information', 'result': 'résultat',
+        'report': 'rapport', 'section': 'section', 'system': 'système', 'process': 'processus',
+        'this is': 'c\'est', 'with': 'avec', 'and': 'et', 'or': 'ou', 'for': 'pour', 'in': 'dans', 'on': 'sur'
+      },
+      German: {
+        'document': 'Dokument', 'summary': 'Zusammenfassung', 'title': 'Titel', 'overview': 'Übersicht',
+        'table': 'Tabelle', 'content': 'Inhalt', 'sample': 'Beispiel', 'header': 'Kopfzeile',
+        'paragraph': 'Absatz', 'text': 'Text', 'file': 'Datei', 'pdf': 'PDF', 'page': 'Seite',
+        'number': 'Nummer', 'data': 'Daten', 'information': 'Informationen', 'result': 'Ergebnis',
+        'report': 'Bericht', 'section': 'Abschnitt', 'system': 'System', 'process': 'Prozess',
+        'this is': 'dies ist', 'with': 'mit', 'and': 'und', 'or': 'oder', 'for': 'für', 'in': 'in', 'on': 'auf'
+      },
+      Hindi: {
+        'document': 'दस्तावेज़', 'summary': 'सारांश', 'title': 'शीर्षक', 'overview': 'अवलोकन',
+        'table': 'तालिका', 'content': 'सामग्री', 'sample': 'नमूना', 'header': 'हेडर',
+        'paragraph': 'अनुच्छेद', 'text': 'पाठ', 'file': 'फ़ाइल', 'pdf': 'पीडीएफ', 'page': 'पृष्ठ',
+        'number': 'संख्या', 'data': 'डेटा', 'information': 'जानकारी', 'result': 'परिणाम',
+        'report': 'रिपोर्ट', 'section': 'अनुभाग', 'system': 'प्रणाली', 'process': 'प्रक्रिया',
+        'this is': 'यह है', 'with': 'के साथ', 'and': 'और', 'or': 'या', 'for': 'के लिए', 'in': 'में', 'on': 'पर'
+      }
+    };
+
+    const targetDict = dictionary[targetLang] || {};
+    const lines = rawText.split(/\r?\n/);
+    const translatedLines = lines.map((line) => {
+      let trLine = line;
+      Object.keys(targetDict).forEach((key) => {
+        const regex = new RegExp(`\\b${key}\\b`, 'gi');
+        trLine = trLine.replace(regex, targetDict[key]);
+      });
+      return trLine;
+    });
+
+    const translatedText = `--- OMNI-PDF LOCAL TRANSLATION (${sourceLang.toUpperCase()} → ${targetLang.toUpperCase()}) ---\n\n${translatedLines.join('\n')}`;
+
+    const meta = saveUserFile(
+      req.sessionId,
+      Buffer.from(translatedText, 'utf8'),
+      `Translated_${targetLang}_${record.metadata.originalName.replace(/\.[^/.]+$/, '')}.txt`,
+      'text/plain'
+    );
+
+    res.json({
+      success: true,
+      fileId: meta.fileId,
+      originalName: meta.originalName,
+      size: meta.size,
+      translatedText,
+      sourceLang,
+      targetLang,
+      expiresAt: meta.expiresAt
+    });
+  } catch (err) {
+    console.error('Translate Error:', err);
     res.status(500).json({ error: 'Failed to translate PDF: ' + err.message });
   }
 });

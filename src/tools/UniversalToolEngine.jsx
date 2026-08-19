@@ -70,7 +70,7 @@ export default function UniversalToolEngine({ tool, onBack }) {
   const [errorMsg, setErrorMsg] = useState(null);
 
   // Tool Controls State
-  const [splitMode, setSplitMode] = useState('range'); // 'range' | 'pages' | 'fixed'
+  const [splitMode, setSplitMode] = useState('range');
   const [pageRange, setPageRange] = useState('1');
   const [fixedPageCount, setFixedPageCount] = useState(2);
   const [rangesList, setRangesList] = useState([{ id: 1, from: 1, to: 3 }]);
@@ -82,15 +82,17 @@ export default function UniversalToolEngine({ tool, onBack }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [numberPosition, setNumberPosition] = useState('bottom-right');
+
+  // AI & Local Extractor Controls
+  const [preserveHeadings, setPreserveHeadings] = useState(true);
+  const [preserveTables, setPreserveTables] = useState(true);
+  const [includeImageLinks, setIncludeImageLinks] = useState(true);
+
+  const [summaryLength, setSummaryLength] = useState('medium'); // 'short' | 'medium' | 'detailed'
+  const [sourceLang, setSourceLang] = useState('English');
   const [targetLang, setTargetLang] = useState('Spanish');
-  const [htmlCode, setHtmlCode] = useState('<h1>Sample PDF Document</h1><p>Generated from HTML input.</p>');
-  const [signatureText, setSignatureText] = useState('John Doe');
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [aiQuestion, setAiQuestion] = useState('');
-  const [aiAnswers, setAiAnswers] = useState([]);
-  const [cropPercent, setCropPercent] = useState(10);
   const [redactKeywords, setRedactKeywords] = useState('CONFIDENTIAL, INTERNAL');
+  const [copiedText, setCopiedText] = useState(false);
 
   useEffect(() => {
     setFiles([]);
@@ -129,8 +131,15 @@ export default function UniversalToolEngine({ tool, onBack }) {
     );
   };
 
+  const handleCopyResultText = () => {
+    if (!result?.previewText) return;
+    navigator.clipboard.writeText(result.previewText);
+    setCopiedText(true);
+    setTimeout(() => setCopiedText(false), 2000);
+  };
+
   const handleProcess = async () => {
-    if (files.length === 0 && toolId !== 'html-to-pdf' && toolId !== 'scan-to-pdf') {
+    if (files.length === 0 && toolId !== 'html-to-pdf') {
       setErrorMsg('Please select a file to process.');
       return;
     }
@@ -151,7 +160,6 @@ export default function UniversalToolEngine({ tool, onBack }) {
 
     try {
       let uploadedFileId = null;
-      let uploadedFileRec = null;
 
       if (files.length > 0) {
         const formData = new FormData();
@@ -163,8 +171,7 @@ export default function UniversalToolEngine({ tool, onBack }) {
         }
         const upJson = await upRes.json();
         if (upJson.files && upJson.files.length > 0) {
-          uploadedFileRec = upJson.files[0];
-          uploadedFileId = uploadedFileRec.fileId;
+          uploadedFileId = upJson.files[0].fileId;
         }
       }
 
@@ -204,37 +211,24 @@ export default function UniversalToolEngine({ tool, onBack }) {
           apiEndpoint = '/api/pdf/extract-pages';
           payload.pageRange = pageRange;
           break;
-        case 'word-to-pdf':
-          apiEndpoint = '/api/pdf/word-to-pdf';
-          break;
-        case 'powerpoint-to-pdf':
-          apiEndpoint = '/api/pdf/ppt-to-pdf';
-          break;
-        case 'excel-to-pdf':
-          apiEndpoint = '/api/pdf/excel-to-pdf';
-          break;
-        case 'pdf-to-jpg':
-          apiEndpoint = '/api/pdf/pdf-to-jpg';
-          break;
-        case 'pdf-to-word':
-          apiEndpoint = '/api/pdf/pdf-to-word';
-          break;
-        case 'pdf-to-excel':
-          apiEndpoint = '/api/pdf/pdf-to-excel';
-          break;
-        case 'pdf-to-powerpoint':
-          apiEndpoint = '/api/pdf/pdf-to-ppt';
-          break;
         case 'pdf-to-markdown':
           apiEndpoint = '/api/pdf/pdf-to-markdown';
+          payload.preserveHeadings = preserveHeadings;
+          payload.preserveTables = preserveTables;
+          payload.includeImageLinks = includeImageLinks;
+          break;
+        case 'ai-summarizer':
+          apiEndpoint = '/api/pdf/ai-summarizer';
+          payload.length = summaryLength;
+          break;
+        case 'translate-pdf':
+          apiEndpoint = '/api/pdf/translate';
+          payload.sourceLang = sourceLang;
+          payload.targetLang = targetLang;
           break;
         case 'redact-pdf':
           apiEndpoint = '/api/pdf/redact';
           payload.keywords = redactKeywords;
-          break;
-        case 'translate-pdf':
-          apiEndpoint = '/api/pdf/translate';
-          payload.targetLang = targetLang;
           break;
         default:
           apiEndpoint = '/api/pdf/repair';
@@ -252,7 +246,7 @@ export default function UniversalToolEngine({ tool, onBack }) {
 
       const procJson = await processRes.json();
       let infoText = `${toolName} processed successfully.`;
-      let textPreview = procJson.markdownText || null;
+      let previewText = procJson.markdownText || procJson.summaryText || procJson.translatedText || null;
 
       setResult({
         fileId: procJson.fileId,
@@ -260,7 +254,7 @@ export default function UniversalToolEngine({ tool, onBack }) {
         filename: procJson.originalName,
         infoText,
         expiresAt: procJson.expiresAt || Date.now() + 3 * 60 * 60 * 1000,
-        textPreview
+        previewText
       });
 
       setIsProcessing(false);
@@ -283,14 +277,14 @@ export default function UniversalToolEngine({ tool, onBack }) {
     <div className="max-w-6xl mx-auto px-4 py-8">
       <button
         onClick={onBack}
-        className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white mb-6 transition"
+        className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white mb-6 transition font-medium"
       >
         <ArrowLeft className="w-4 h-4" /> Back to All Tools
       </button>
 
-      {/* Title Header */}
+      {/* Header */}
       <div className="text-center mb-8">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold mb-4">
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-semibold mb-4">
           <IconComponent className="w-4 h-4" /> {toolName}
         </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-3">
@@ -303,7 +297,7 @@ export default function UniversalToolEngine({ tool, onBack }) {
 
       {!result ? (
         <div>
-          {files.length === 0 && toolId !== 'html-to-pdf' ? (
+          {files.length === 0 ? (
             <div className="max-w-3xl mx-auto">
               <FileUploader
                 accept={toolAccept}
@@ -336,7 +330,6 @@ export default function UniversalToolEngine({ tool, onBack }) {
 
                 <div className="glass-panel p-6 rounded-3xl min-h-[340px] space-y-4">
                   {toolId === 'split-pdf' && splitMode === 'range' ? (
-                    /* Grouped Range Containers for Split PDF */
                     <div className="space-y-4">
                       {rangesList.map((rng, rIdx) => (
                         <RangeContainer
@@ -363,7 +356,6 @@ export default function UniversalToolEngine({ tool, onBack }) {
                       <AddItemButton label="Add Range" onClick={handleAddRange} />
                     </div>
                   ) : (
-                    /* Standard File & Thumbnail Preview Grid */
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                       {files.map((f, i) => (
                         <div
@@ -460,6 +452,117 @@ export default function UniversalToolEngine({ tool, onBack }) {
                       checked={mergeRanges}
                       onChange={setMergeRanges}
                     />
+                  </div>
+                )}
+
+                {/* PDF TO MARKDOWN OPTIONS */}
+                {toolId === 'pdf-to-markdown' && (
+                  <div className="space-y-4">
+                    <label className="text-xs font-bold text-slate-300 tracking-wider uppercase block">
+                      Extraction Options
+                    </label>
+
+                    <FormCheckbox
+                      label="Preserve Headings"
+                      checked={preserveHeadings}
+                      onChange={setPreserveHeadings}
+                      description="Formats section titles into Markdown # and ## headers."
+                    />
+
+                    <FormCheckbox
+                      label="Preserve Tables"
+                      checked={preserveTables}
+                      onChange={setPreserveTables}
+                      description="Formats multi-column layout data as Markdown GFM tables."
+                    />
+
+                    <FormCheckbox
+                      label="Include Image Links"
+                      checked={includeImageLinks}
+                      onChange={setIncludeImageLinks}
+                      description="Inserts image and figure anchor links."
+                    />
+
+                    <p className="text-[11px] text-amber-400 bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
+                      💡 Note: Table and heading detection is heuristic-based and formats layout structures automatically.
+                    </p>
+                  </div>
+                )}
+
+                {/* AI SUMMARIZER OPTIONS */}
+                {toolId === 'ai-summarizer' && (
+                  <div className="space-y-4">
+                    <label className="text-xs font-bold text-slate-300 tracking-wider uppercase block">
+                      Summary Length
+                    </label>
+
+                    <div className="space-y-2">
+                      <SelectableCard
+                        isSelected={summaryLength === 'short'}
+                        onClick={() => setSummaryLength('short')}
+                        title="Short Summary"
+                        subtitle="Executive overview (~15% length)"
+                        isAi={true}
+                      />
+                      <SelectableCard
+                        isSelected={summaryLength === 'medium'}
+                        onClick={() => setSummaryLength('medium')}
+                        title="Medium Summary"
+                        subtitle="Balanced key insights (~30% length)"
+                        isAi={true}
+                      />
+                      <SelectableCard
+                        isSelected={summaryLength === 'detailed'}
+                        onClick={() => setSummaryLength('detailed')}
+                        title="Detailed Summary"
+                        subtitle="Comprehensive breakdown (~50% length)"
+                        isAi={true}
+                      />
+                    </div>
+
+                    <p className="text-[11px] text-purple-400 bg-purple-500/10 p-3 rounded-xl border border-purple-500/20">
+                      ✨ Extractive AI summary: pulls key high-weight sentences directly from original text without hallucination.
+                    </p>
+                  </div>
+                )}
+
+                {/* TRANSLATE PDF OPTIONS */}
+                {toolId === 'translate-pdf' && (
+                  <div className="space-y-4">
+                    <label className="text-xs font-bold text-slate-300 tracking-wider uppercase block">
+                      Language Pair
+                    </label>
+
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Source Language</label>
+                        <select
+                          value={sourceLang}
+                          onChange={(e) => setSourceLang(e.target.value)}
+                          className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none focus:border-rose-500 font-medium"
+                        >
+                          <option value="English">English</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Target Language</label>
+                        <select
+                          value={targetLang}
+                          onChange={(e) => setTargetLang(e.target.value)}
+                          className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none focus:border-rose-500 font-medium"
+                        >
+                          <option value="Spanish">Spanish (Español)</option>
+                          <option value="French">French (Français)</option>
+                          <option value="German">German (Deutsch)</option>
+                          <option value="Hindi">Hindi (हिंदी)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-emerald-400 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
+                      🔒 Local offline engine: processes document 100% locally with zero external API calls or billing risk.
+                    </p>
                   </div>
                 )}
 
@@ -623,7 +726,7 @@ export default function UniversalToolEngine({ tool, onBack }) {
         </div>
       ) : (
         /* Results View */
-        <div className="glass-panel p-8 rounded-3xl text-center space-y-6 max-w-2xl mx-auto">
+        <div className="glass-panel p-8 rounded-3xl text-center space-y-6 max-w-3xl mx-auto">
           <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-8 h-8" />
           </div>
@@ -632,6 +735,25 @@ export default function UniversalToolEngine({ tool, onBack }) {
             <h2 className="text-2xl font-extrabold text-white mb-2">{toolName} Completed!</h2>
             <p className="text-sm text-slate-400">{result.infoText}</p>
           </div>
+
+          {result.previewText && (
+            <div className="text-left space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-bold text-slate-300 tracking-wider uppercase">Output Preview</span>
+                <button
+                  onClick={handleCopyResultText}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+                >
+                  {copiedText ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedText ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 max-h-80 overflow-y-auto font-mono text-xs text-slate-300 whitespace-pre-wrap">
+                {result.previewText}
+              </div>
+            </div>
+          )}
 
           {result.expiresAt && (
             <div className="flex justify-center">
@@ -644,7 +766,7 @@ export default function UniversalToolEngine({ tool, onBack }) {
               onClick={() => downloadFile(result.fileId, result.filename)}
               className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-bold text-sm shadow-lg shadow-rose-600/25 flex items-center justify-center gap-2 transition"
             >
-              <Download className="w-5 h-5" /> Download Result
+              <Download className="w-5 h-5" /> Download Result ({result.filename.endsWith('.md') ? '.md' : '.txt'})
             </button>
 
             <button
