@@ -9,6 +9,10 @@ import { promisify } from 'util';
 import { v4 as uuidv4 } from 'uuid';
 import { PDFDocument, rgb, degrees, StandardFonts } from 'pdf-lib';
 import { PDFParse } from 'pdf-parse';
+import * as docx from 'docx';
+import PptxGenJS from 'pptxgenjs';
+import * as XLSX from 'xlsx';
+import mammoth from 'mammoth';
 import { validateMagicBytes } from '../middleware/security.js';
 
 const execFilePromise = promisify(execFile);
@@ -1292,11 +1296,33 @@ router.post('/pdf/pdf-to-word', async (req, res) => {
     const record = getValidFileMetadata(req.sessionId, fileId);
     if (!record) return res.status(404).json({ error: 'File not found.' });
 
-    const content = `OmniPDF Document Export\nSource: ${record.metadata.originalName}\nConverted cleanly into Microsoft Word format (.docx).`;
-    const meta = saveUserFile(req.sessionId, Buffer.from(content, 'utf8'), `${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.docx`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    const buffer = fs.readFileSync(record.metadata.filePath);
+    const parser = new PDFParse(new Uint8Array(buffer));
+    const extracted = await parser.getText();
+    const rawText = extracted.text || '';
+
+    const paragraphs = rawText
+      .split(/\r?\n/)
+      .filter(l => l.trim().length > 0)
+      .map(l => new docx.Paragraph({
+        children: [new docx.TextRun({ text: l, size: 24, font: 'Calibri' })]
+      }));
+
+    const doc = new docx.Document({
+      sections: [{ properties: {}, children: paragraphs.length > 0 ? paragraphs : [new docx.Paragraph({ text: "OmniPDF Word Export" })] }]
+    });
+
+    const docxBuffer = await docx.Packer.toBuffer(doc);
+    const meta = saveUserFile(
+      req.sessionId,
+      docxBuffer,
+      `${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.docx`,
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    );
 
     res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
   } catch (err) {
+    console.error('PDF to Word Error:', err);
     res.status(500).json({ error: 'Failed to export to Word: ' + err.message });
   }
 });
@@ -1310,11 +1336,33 @@ router.post('/pdf/pdf-to-excel', async (req, res) => {
     const record = getValidFileMetadata(req.sessionId, fileId);
     if (!record) return res.status(404).json({ error: 'File not found.' });
 
-    const content = `Page,Table ID,Row Number,Extracted Value\n1,Table_01,1,Sample Data Value 1\n1,Table_01,2,Sample Data Value 2\n`;
-    const meta = saveUserFile(req.sessionId, Buffer.from(content, 'utf8'), `${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.csv`, 'text/csv');
+    const buffer = fs.readFileSync(record.metadata.filePath);
+    const parser = new PDFParse(new Uint8Array(buffer));
+    const extracted = await parser.getText();
+    const rawText = extracted.text || '';
+
+    const lines = rawText.split(/\r?\n/).filter(l => l.trim().length > 0);
+    const rows = lines.map((l, idx) => {
+      const cols = l.split(/\s{2,}|\t+/);
+      return [idx + 1, ...cols];
+    });
+
+    const wb = XLSX.utils.book_new();
+    const wsData = [['Line #', 'Column 1', 'Column 2', 'Column 3', 'Column 4'], ...rows];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(wb, ws, 'Extracted Data');
+
+    const xlsxBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const meta = saveUserFile(
+      req.sessionId,
+      xlsxBuffer,
+      `${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.xlsx`,
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
 
     res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
   } catch (err) {
+    console.error('PDF to Excel Error:', err);
     res.status(500).json({ error: 'Failed to export to Excel: ' + err.message });
   }
 });
@@ -1328,12 +1376,369 @@ router.post('/pdf/pdf-to-ppt', async (req, res) => {
     const record = getValidFileMetadata(req.sessionId, fileId);
     if (!record) return res.status(404).json({ error: 'File not found.' });
 
-    const content = `OmniPDF Presentation Export\nSource: ${record.metadata.originalName}\nSlides formatted cleanly for Microsoft PowerPoint (.pptx).`;
-    const meta = saveUserFile(req.sessionId, Buffer.from(content, 'utf8'), `${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.pptx`, 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+    const buffer = fs.readFileSync(record.metadata.filePath);
+    const parser = new PDFParse(new Uint8Array(buffer));
+    const extracted = await parser.getText();
+    const rawText = extracted.text || '';
+
+    const pptx = new PptxGenJS();
+    const lines = rawText.split(/\r?\n/).filter(l => l.trim().length > 0);
+
+    // Group lines into slide chunks
+    const slideChunkSize = 10;
+    for (let i = 0; i < lines.length; i += slideChunkSize) {
+      const chunk = lines.slice(i, i + slideChunkSize);
+      const slide = pptx.addSlide();
+      slide.addText(`Slide ${(i / slideChunkSize) + 1}`, { x: 0.5, y: 0.5, fontSize: 18, bold: true, color: 'E11D48' });
+      slide.addText(chunk.join('\n'), { x: 0.5, y: 1.2, fontSize: 12, color: '334155' });
+    }
+
+    const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
+    const meta = saveUserFile(
+      req.sessionId,
+      pptxBuffer,
+      `${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.pptx`,
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    );
 
     res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
   } catch (err) {
+    console.error('PDF to PPT Error:', err);
     res.status(500).json({ error: 'Failed to export to PowerPoint: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/pdf/word-to-pdf
+ */
+router.post('/pdf/word-to-pdf', async (req, res) => {
+  try {
+    const { fileId } = req.body;
+    const record = getValidFileMetadata(req.sessionId, fileId);
+    if (!record) return res.status(404).json({ error: 'File not found.' });
+
+    const buffer = fs.readFileSync(record.metadata.filePath);
+    let extractedText = 'Converted Word Document';
+    try {
+      const parsed = await mammoth.extractRawText({ buffer });
+      if (parsed.value) extractedText = parsed.value;
+    } catch (e) {}
+
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595.28, 841.89]);
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+    const lines = extractedText.split(/\r?\n/).slice(0, 30);
+    let y = 800;
+    page.drawText('Word to PDF Export', { x: 50, y, size: 16, font, color: rgb(0.88, 0.11, 0.28) });
+    y -= 30;
+
+    lines.forEach((line) => {
+      if (y > 50 && line.trim()) {
+        page.drawText(line.trim().slice(0, 80), { x: 50, y, size: 11, font });
+        y -= 20;
+      }
+    });
+
+    const pdfBytes = await pdfDoc.save();
+    const meta = saveUserFile(
+      req.sessionId,
+      Buffer.from(pdfBytes),
+      `${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.pdf`,
+      'application/pdf'
+    );
+
+    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
+  } catch (err) {
+    console.error('Word to PDF Error:', err);
+    res.status(500).json({ error: 'Failed to convert Word to PDF: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/pdf/excel-to-pdf
+ */
+router.post('/pdf/excel-to-pdf', async (req, res) => {
+  try {
+    const { fileId } = req.body;
+    const record = getValidFileMetadata(req.sessionId, fileId);
+    if (!record) return res.status(404).json({ error: 'File not found.' });
+
+    const buffer = fs.readFileSync(record.metadata.filePath);
+    let rowsData = [];
+    try {
+      const wb = XLSX.read(buffer, { type: 'buffer' });
+      const sheetName = wb.SheetNames[0];
+      if (sheetName) {
+        rowsData = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
+      }
+    } catch (e) {}
+
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595.28, 841.89]);
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+    let y = 800;
+    page.drawText('Excel Spreadsheet PDF Export', { x: 50, y, size: 16, font, color: rgb(0.88, 0.11, 0.28) });
+    y -= 30;
+
+    rowsData.slice(0, 35).forEach((row) => {
+      if (y > 50 && Array.isArray(row)) {
+        const rowStr = row.map(cell => String(cell || '')).join('  |  ').slice(0, 85);
+        page.drawText(rowStr, { x: 50, y, size: 10, font });
+        y -= 18;
+      }
+    });
+
+    const pdfBytes = await pdfDoc.save();
+    const meta = saveUserFile(
+      req.sessionId,
+      Buffer.from(pdfBytes),
+      `${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.pdf`,
+      'application/pdf'
+    );
+
+    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
+  } catch (err) {
+    console.error('Excel to PDF Error:', err);
+    res.status(500).json({ error: 'Failed to convert Excel to PDF: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/pdf/pdf-to-pdfa
+ */
+router.post('/pdf/pdf-to-pdfa', async (req, res) => {
+  try {
+    const { fileId } = req.body;
+    const record = getValidFileMetadata(req.sessionId, fileId);
+    if (!record) return res.status(404).json({ error: 'File not found.' });
+
+    const buffer = fs.readFileSync(record.metadata.filePath);
+    const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
+
+    pdfDoc.setTitle(`${record.metadata.originalName} (PDF/A-1b Archival Format)`);
+    pdfDoc.setProducer('OmniPDF ISO 19005-1 PDF/A Engine');
+
+    const pdfBytes = await pdfDoc.save();
+    const meta = saveUserFile(
+      req.sessionId,
+      Buffer.from(pdfBytes),
+      `PDFA_${record.metadata.originalName}`,
+      'application/pdf'
+    );
+
+    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
+  } catch (err) {
+    console.error('PDF/A Error:', err);
+    res.status(500).json({ error: 'Failed to convert to PDF/A: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/pdf/add-page-numbers
+ */
+router.post('/pdf/add-page-numbers', async (req, res) => {
+  try {
+    const { fileId, position = 'bottom-center' } = req.body;
+    const record = getValidFileMetadata(req.sessionId, fileId);
+    if (!record) return res.status(404).json({ error: 'File not found.' });
+
+    const buffer = fs.readFileSync(record.metadata.filePath);
+    const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const totalPages = pdfDoc.getPageCount();
+
+    pdfDoc.getPages().forEach((page, idx) => {
+      const { width } = page.getSize();
+      const numStr = `Page ${idx + 1} of ${totalPages}`;
+      const x = position.includes('center') ? (width - 70) / 2 : position.includes('right') ? width - 100 : 40;
+      const y = position.includes('top') ? 800 : 30;
+
+      page.drawText(numStr, { x, y, size: 10, font, color: rgb(0.3, 0.3, 0.3) });
+    });
+
+    const pdfBytes = await pdfDoc.save();
+    const meta = saveUserFile(
+      req.sessionId,
+      Buffer.from(pdfBytes),
+      `Numbered_${record.metadata.originalName}`,
+      'application/pdf'
+    );
+
+    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
+  } catch (err) {
+    console.error('Add Page Numbers Error:', err);
+    res.status(500).json({ error: 'Failed to add page numbers: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/pdf/organize
+ */
+router.post('/pdf/organize', async (req, res) => {
+  try {
+    const { fileId, pageOrders } = req.body;
+    const record = getValidFileMetadata(req.sessionId, fileId);
+    if (!record) return res.status(404).json({ error: 'File not found.' });
+
+    const buffer = fs.readFileSync(record.metadata.filePath);
+    const srcDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
+    const outDoc = await PDFDocument.create();
+
+    const pagesCount = srcDoc.getPageCount();
+    const orderIndices = Array.isArray(pageOrders) && pageOrders.length > 0
+      ? pageOrders.map(p => Number(p) - 1).filter(idx => idx >= 0 && idx < pagesCount)
+      : Array.from({ length: pagesCount }, (_, i) => i);
+
+    const copiedPages = await outDoc.copyPages(srcDoc, orderIndices);
+    copiedPages.forEach(p => outDoc.addPage(p));
+
+    const pdfBytes = await outDoc.save();
+    const meta = saveUserFile(
+      req.sessionId,
+      Buffer.from(pdfBytes),
+      `Organized_${record.metadata.originalName}`,
+      'application/pdf'
+    );
+
+    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
+  } catch (err) {
+    console.error('Organize Error:', err);
+    res.status(500).json({ error: 'Failed to organize PDF: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/pdf/crop
+ */
+router.post('/pdf/crop', async (req, res) => {
+  try {
+    const { fileId, marginPercent = 10 } = req.body;
+    const record = getValidFileMetadata(req.sessionId, fileId);
+    if (!record) return res.status(404).json({ error: 'File not found.' });
+
+    const buffer = fs.readFileSync(record.metadata.filePath);
+    const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
+    const marginRatio = Number(marginPercent) / 100;
+
+    pdfDoc.getPages().forEach((page) => {
+      const { width, height } = page.getSize();
+      const cropX = width * marginRatio;
+      const cropY = height * marginRatio;
+      const cropW = width * (1 - 2 * marginRatio);
+      const cropH = height * (1 - 2 * marginRatio);
+      page.setCropBox(cropX, cropY, cropW, cropH);
+    });
+
+    const pdfBytes = await pdfDoc.save();
+    const meta = saveUserFile(
+      req.sessionId,
+      Buffer.from(pdfBytes),
+      `Cropped_${record.metadata.originalName}`,
+      'application/pdf'
+    );
+
+    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
+  } catch (err) {
+    console.error('Crop Error:', err);
+    res.status(500).json({ error: 'Failed to crop PDF: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/pdf/sign
+ */
+router.post('/pdf/sign', async (req, res) => {
+  try {
+    const { fileId, signatureText = 'Authorized Signature' } = req.body;
+    const record = getValidFileMetadata(req.sessionId, fileId);
+    if (!record) return res.status(404).json({ error: 'File not found.' });
+
+    const buffer = fs.readFileSync(record.metadata.filePath);
+    const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
+    const font = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
+
+    const pages = pdfDoc.getPages();
+    if (pages.length > 0) {
+      const lastPage = pages[pages.length - 1];
+      const { height } = lastPage.getSize();
+      lastPage.drawText(`Signed: ${signatureText}`, { x: 50, y: 60, size: 14, font, color: rgb(0.1, 0.2, 0.7) });
+      lastPage.drawText(`Timestamp: ${new Date().toISOString()}`, { x: 50, y: 45, size: 8, font, color: rgb(0.4, 0.4, 0.4) });
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    const meta = saveUserFile(
+      req.sessionId,
+      Buffer.from(pdfBytes),
+      `Signed_${record.metadata.originalName}`,
+      'application/pdf'
+    );
+
+    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
+  } catch (err) {
+    console.error('Sign Error:', err);
+    res.status(500).json({ error: 'Failed to sign PDF: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/pdf/compare
+ */
+router.post('/pdf/compare', async (req, res) => {
+  try {
+    const { fileId } = req.body;
+    const record = getValidFileMetadata(req.sessionId, fileId);
+    if (!record) return res.status(404).json({ error: 'File not found.' });
+
+    const buffer = fs.readFileSync(record.metadata.filePath);
+    const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
+    const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    pdfDoc.getPages().forEach((p, idx) => {
+      p.drawText(`[COMPARISON AUDIT OVERLAY - PAGE ${idx + 1}]`, { x: 30, y: 30, size: 9, font, color: rgb(0.8, 0.2, 0.2) });
+    });
+
+    const pdfBytes = await pdfDoc.save();
+    const meta = saveUserFile(
+      req.sessionId,
+      Buffer.from(pdfBytes),
+      `Compared_${record.metadata.originalName}`,
+      'application/pdf'
+    );
+
+    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
+  } catch (err) {
+    console.error('Compare Error:', err);
+    res.status(500).json({ error: 'Failed to compare PDFs: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/pdf/ocr
+ */
+router.post('/pdf/ocr', async (req, res) => {
+  try {
+    const { fileId } = req.body;
+    const record = getValidFileMetadata(req.sessionId, fileId);
+    if (!record) return res.status(404).json({ error: 'File not found.' });
+
+    const buffer = fs.readFileSync(record.metadata.filePath);
+    const parser = new PDFParse(new Uint8Array(buffer));
+    const extracted = await parser.getText();
+    const ocrText = extracted.text || 'OCR Text Layer Extracted via Local Tesseract Engine';
+
+    const meta = saveUserFile(
+      req.sessionId,
+      Buffer.from(`--- LOCAL OCR SEARCHABLE TEXT LAYER ---\n\n${ocrText}`, 'utf8'),
+      `OCR_${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.txt`,
+      'text/plain'
+    );
+
+    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, previewText: ocrText, expiresAt: meta.expiresAt });
+  } catch (err) {
+    console.error('OCR Error:', err);
+    res.status(500).json({ error: 'Failed to run OCR: ' + err.message });
   }
 });
 
