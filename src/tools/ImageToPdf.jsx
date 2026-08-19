@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import FileUploader from '../components/FileUploader';
 import CountdownTimer from '../components/CountdownTimer';
+import SelectableCard from '../components/shared/SelectableCard';
+import FormCheckbox from '../components/shared/FormCheckbox';
+import PrimaryActionButton from '../components/shared/PrimaryActionButton';
 import { downloadFile, apiFetch } from '../utils/apiClient';
 import { PDFDocument } from 'pdf-lib';
 import {
@@ -546,31 +549,18 @@ export default function ImageToPdf() {
                     Page Orientation
                   </label>
                   <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
+                    <SelectableCard
+                      isSelected={orientation === 'portrait'}
                       onClick={() => setOrientation('portrait')}
-                      className={`p-3.5 rounded-2xl border flex flex-col items-center justify-center gap-2 transition duration-200 ${
-                        orientation === 'portrait'
-                          ? 'border-rose-500 bg-rose-500/10 text-rose-400 font-bold shadow-md shadow-rose-500/10 ring-1 ring-rose-500/30'
-                          : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700'
-                      }`}
-                    >
-                      <Smartphone className="w-6 h-6" />
-                      <span className="text-xs font-semibold">Portrait</span>
-                    </button>
-
-                    <button
-                      type="button"
+                      title="Portrait"
+                      icon={Smartphone}
+                    />
+                    <SelectableCard
+                      isSelected={orientation === 'landscape'}
                       onClick={() => setOrientation('landscape')}
-                      className={`p-3.5 rounded-2xl border flex flex-col items-center justify-center gap-2 transition duration-200 ${
-                        orientation === 'landscape'
-                          ? 'border-rose-500 bg-rose-500/10 text-rose-400 font-bold shadow-md shadow-rose-500/10 ring-1 ring-rose-500/30'
-                          : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700'
-                      }`}
-                    >
-                      <Layout className="w-6 h-6" />
-                      <span className="text-xs font-semibold">Landscape</span>
-                    </button>
+                      title="Landscape"
+                      icon={Layout}
+                    />
                   </div>
                 </div>
 
@@ -598,61 +588,33 @@ export default function ImageToPdf() {
                     Margin
                   </label>
                   <div className="grid grid-cols-3 gap-2.5">
-                    <button
-                      type="button"
+                    <SelectableCard
+                      isSelected={margin === 'none'}
                       onClick={() => setMargin('none')}
-                      className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1.5 transition duration-200 ${
-                        margin === 'none'
-                          ? 'border-rose-500 bg-rose-500/10 text-rose-400 font-bold shadow-md shadow-rose-500/10 ring-1 ring-rose-500/30'
-                          : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700'
-                      }`}
-                    >
-                      <Square className="w-5 h-5" />
-                      <span className="text-[11px] font-semibold">No margin</span>
-                    </button>
-
-                    <button
-                      type="button"
+                      title="No margin"
+                      icon={Square}
+                    />
+                    <SelectableCard
+                      isSelected={margin === 'small'}
                       onClick={() => setMargin('small')}
-                      className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1.5 transition duration-200 ${
-                        margin === 'small'
-                          ? 'border-rose-500 bg-rose-500/10 text-rose-400 font-bold shadow-md shadow-rose-500/10 ring-1 ring-rose-500/30'
-                          : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700'
-                      }`}
-                    >
-                      <Minimize2 className="w-5 h-5" />
-                      <span className="text-[11px] font-semibold">Small</span>
-                    </button>
-
-                    <button
-                      type="button"
+                      title="Small"
+                      icon={Minimize2}
+                    />
+                    <SelectableCard
+                      isSelected={margin === 'big'}
                       onClick={() => setMargin('big')}
-                      className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1.5 transition duration-200 ${
-                        margin === 'big'
-                          ? 'border-rose-500 bg-rose-500/10 text-rose-400 font-bold shadow-md shadow-rose-500/10 ring-1 ring-rose-500/30'
-                          : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700'
-                      }`}
-                    >
-                      <Maximize2 className="w-5 h-5" />
-                      <span className="text-[11px] font-semibold">Big</span>
-                    </button>
+                      title="Big"
+                      icon={Maximize2}
+                    />
                   </div>
                 </div>
 
                 {/* Merge Checkbox */}
-                <div className="pt-2">
-                  <label className="flex items-center gap-3 cursor-pointer p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition">
-                    <input
-                      type="checkbox"
-                      checked={mergeAll}
-                      onChange={(e) => setMergeAll(e.target.checked)}
-                      className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 border-slate-700 bg-slate-950 cursor-pointer"
-                    />
-                    <span className="text-xs font-semibold text-slate-200">
-                      Merge all images in one PDF file
-                    </span>
-                  </label>
-                </div>
+                <FormCheckbox
+                  label="Merge all images in one PDF file"
+                  checked={mergeAll}
+                  onChange={setMergeAll}
+                />
 
                 {/* Error Banner */}
                 {errorMsg && (
@@ -663,25 +625,12 @@ export default function ImageToPdf() {
                 )}
 
                 {/* Convert Button */}
-                <div className="pt-2">
-                  <button
-                    onClick={handleConvert}
-                    disabled={isProcessing || images.length === 0}
-                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-rose-600 via-rose-500 to-amber-500 hover:from-rose-500 hover:to-amber-400 disabled:opacity-50 text-white font-bold text-base shadow-xl shadow-rose-600/30 flex items-center justify-center gap-2 transition transform active:scale-98"
-                  >
-                    {isProcessing ? (
-                      <>
-                        <RefreshCw className="w-5 h-5 animate-spin" />
-                        Converting to PDF...
-                      </>
-                    ) : (
-                      <>
-                        <span>Convert to PDF</span>
-                        <ArrowRight className="w-5 h-5" />
-                      </>
-                    )}
-                  </button>
-                </div>
+                <PrimaryActionButton
+                  label="Convert to PDF"
+                  onClick={handleConvert}
+                  isProcessing={isProcessing}
+                  disabled={images.length === 0}
+                />
               </div>
             </div>
           )}

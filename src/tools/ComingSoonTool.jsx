@@ -1,6 +1,7 @@
 import React from 'react';
 import { Sparkles, Clock, ShieldCheck, ArrowLeft, Layers, CheckCircle2 } from 'lucide-react';
 import FileUploader from '../components/FileUploader';
+import SelectableCard from '../components/shared/SelectableCard';
 
 export default function ComingSoonTool({ tool, onBack, onSelectTool }) {
   return (
@@ -58,29 +59,25 @@ export default function ComingSoonTool({ tool, onBack, onSelectTool }) {
               Try Active Fully Functional Tools
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto">
-              <button
+              <SelectableCard
+                isSelected={false}
                 onClick={() => onSelectTool('background-remover')}
-                className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-rose-500/50 hover:bg-slate-900 text-left transition group"
-              >
-                <span className="text-xs font-bold text-rose-400 block mb-1">AI Tool</span>
-                <span className="text-sm font-bold text-white group-hover:text-rose-400 transition">Background Remover</span>
-              </button>
-
-              <button
+                title="Background Remover"
+                subtitle="AI Tool"
+                isAi={true}
+              />
+              <SelectableCard
+                isSelected={false}
                 onClick={() => onSelectTool('merge-pdf')}
-                className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-rose-500/50 hover:bg-slate-900 text-left transition group"
-              >
-                <span className="text-xs font-bold text-rose-400 block mb-1">PDF Tool</span>
-                <span className="text-sm font-bold text-white group-hover:text-rose-400 transition">Merge PDF</span>
-              </button>
-
-              <button
+                title="Merge PDF"
+                subtitle="Multi-PDF Combiner"
+              />
+              <SelectableCard
+                isSelected={false}
                 onClick={() => onSelectTool('compress-pdf')}
-                className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-rose-500/50 hover:bg-slate-900 text-left transition group"
-              >
-                <span className="text-xs font-bold text-rose-400 block mb-1">PDF Tool</span>
-                <span className="text-sm font-bold text-white group-hover:text-rose-400 transition">Compress PDF</span>
-              </button>
+                title="Compress PDF"
+                subtitle="Smart File Compression"
+              />
             </div>
           </div>
         </div>

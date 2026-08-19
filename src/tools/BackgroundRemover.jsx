@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { removeBackground } from '@imgly/background-removal';
 import FileUploader from '../components/FileUploader';
 import CountdownTimer from '../components/CountdownTimer';
+import SelectableCard from '../components/shared/SelectableCard';
+import PrimaryActionButton from '../components/shared/PrimaryActionButton';
 import { 
   Sparkles, Download, RefreshCw, Palette, Image as ImageIcon, 
   ArrowLeftRight, Check, AlertCircle, Eraser, RotateCcw, Undo, 
@@ -433,31 +435,17 @@ export default function BackgroundRemover() {
                 icon: Zap,
                 badge: 'Fastest'
               }
-            ].map((m) => {
-              const IconComp = m.icon;
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => setModelMode(m.id)}
-                  className={`p-4 rounded-2xl border text-left flex flex-col justify-between transition ${
-                    modelMode === m.id
-                      ? 'border-rose-500 bg-rose-500/10'
-                      : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <IconComp className="w-5 h-5 text-rose-400" />
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-rose-400 border border-slate-700">
-                        {m.badge}
-                      </span>
-                    </div>
-                    <h4 className="text-sm font-bold text-white mb-1">{m.title}</h4>
-                    <p className="text-xs text-slate-400">{m.desc}</p>
-                  </div>
-                </button>
-              );
-            })}
+            ].map((m) => (
+              <SelectableCard
+                key={m.id}
+                isSelected={modelMode === m.id}
+                onClick={() => setModelMode(m.id)}
+                title={m.title}
+                subtitle={m.desc}
+                icon={m.icon}
+                isAi={true}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -837,12 +825,11 @@ export default function BackgroundRemover() {
 
                 {/* Download Action */}
                 <div className="space-y-3">
-                  <button
+                  <PrimaryActionButton
+                    label="Download HD PNG"
                     onClick={handleDownload}
-                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 via-rose-500 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white font-bold text-base shadow-xl shadow-rose-600/30 flex items-center justify-center gap-2 transition"
-                  >
-                    <Download className="w-5 h-5" /> Download HD PNG
-                  </button>
+                    icon={Download}
+                  />
                   <p className="text-xs text-slate-500 text-center">
                     Processed safely in-browser with zero server file retention.
                   </p>
