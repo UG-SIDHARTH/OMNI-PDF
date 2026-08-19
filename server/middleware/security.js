@@ -59,7 +59,8 @@ export function validateMagicBytes(expectedType) {
  */
 export function ensureSession(req, res, next) {
   let sessionId = req.cookies['x-session-id'] || req.headers['x-session-id'];
-  if (!sessionId) {
+  // Strict format validation: alphanumeric, hyphen, underscore only
+  if (!sessionId || typeof sessionId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(sessionId)) {
     sessionId = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     res.cookie('x-session-id', sessionId, {
       httpOnly: true,

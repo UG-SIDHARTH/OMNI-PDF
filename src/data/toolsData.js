@@ -95,10 +95,11 @@ export const TOOL_CATEGORIES = [
       {
         id: 'jpg-to-pdf',
         name: 'JPG to PDF',
-        description: 'Convert JPG, PNG, and WebP images to PDF in seconds.',
+        description: 'Convert JPG, PNG, and WebP images to PDF with custom orientation, margin, and layout.',
         icon: 'Image',
         isWorking: true,
-        accept: '.jpg,.jpeg,.png,.webp'
+        accept: '.jpg,.jpeg,.png,.webp',
+        badge: 'Updated'
       },
       {
         id: 'word-to-pdf',

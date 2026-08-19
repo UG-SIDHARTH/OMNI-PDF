@@ -4,6 +4,7 @@ import ToolGrid from './components/ToolGrid';
 import BackgroundRemover from './tools/BackgroundRemover';
 import MergePdf from './tools/MergePdf';
 import CompressPdf from './tools/CompressPdf';
+import ImageToPdf from './tools/ImageToPdf';
 import UniversalToolEngine from './tools/UniversalToolEngine';
 import ComingSoonTool from './tools/ComingSoonTool';
 import { TOOL_CATEGORIES } from './data/toolsData';
@@ -101,6 +102,8 @@ export default function App() {
             <MergePdf />
           ) : activeToolId === 'compress-pdf' ? (
             <CompressPdf />
+          ) : activeToolId === 'jpg-to-pdf' || activeToolId === 'image-to-pdf' ? (
+            <ImageToPdf />
           ) : (
             <UniversalToolEngine
               tool={activeTool || { id: activeToolId, name: activeToolId, description: 'Process PDF file' }}

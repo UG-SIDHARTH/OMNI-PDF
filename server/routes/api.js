@@ -310,13 +310,27 @@ const upload = multer({
  * Helper to get file directory path for session & fileId
  */
 function getFileDir(sessionId, fileId) {
-  return path.join(STORAGE_DIR, sessionId, fileId);
+  const safeSession = String(sessionId || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  const safeFileId = String(fileId || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  
+  const targetDir = path.resolve(STORAGE_DIR, safeSession, safeFileId);
+  const rootStorage = path.resolve(STORAGE_DIR);
+
+  if (!targetDir.startsWith(rootStorage)) {
+    throw new Error('Invalid path traversal attempt.');
+  }
+
+  return targetDir;
 }
 
 /**
  * Helper to load metadata and verify ownership & expiry
  */
 function getValidFileMetadata(sessionId, fileId) {
+  if (!fileId || typeof fileId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(fileId)) {
+    return null;
+  }
+
   let fileDir = getFileDir(sessionId, fileId);
   let metaPath = path.join(fileDir, 'metadata.json');
 
@@ -325,6 +339,7 @@ function getValidFileMetadata(sessionId, fileId) {
     try {
       const sessionDirs = fs.readdirSync(STORAGE_DIR);
       for (const sFolder of sessionDirs) {
+        if (!/^[a-zA-Z0-9_-]+$/.test(sFolder)) continue;
         const candidateMetaPath = path.join(STORAGE_DIR, sFolder, fileId, 'metadata.json');
         if (fs.existsSync(candidateMetaPath)) {
           fileDir = path.join(STORAGE_DIR, sFolder, fileId);
@@ -343,6 +358,11 @@ function getValidFileMetadata(sessionId, fileId) {
 
   try {
     const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+
+    // Path traversal check on stored filePath
+    if (metadata.filePath && !path.resolve(metadata.filePath).startsWith(path.resolve(STORAGE_DIR))) {
+      return null;
+    }
 
     // Expiry check
     if (Date.now() > metadata.expiresAt) {
