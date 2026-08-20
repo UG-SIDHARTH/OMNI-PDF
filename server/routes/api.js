@@ -586,7 +586,7 @@ router.post('/pdf/rotate', async (req, res) => {
  */
 router.post('/pdf/split', async (req, res) => {
   try {
-    const { fileId, pageRange = '1' } = req.body;
+    const { fileId, pageRange, ranges } = req.body;
     const record = getValidFileMetadata(req.sessionId, fileId);
     if (!record) return res.status(404).json({ error: 'File not found.' });
 
@@ -594,18 +594,30 @@ router.post('/pdf/split', async (req, res) => {
     const srcDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
     const totalPages = srcDoc.getPageCount();
 
-    const newDoc = await PDFDocument.create();
-    let pageNums = [];
-    if (pageRange.includes('-')) {
-      const [start, end] = pageRange.split('-').map((n) => parseInt(n.trim(), 10));
-      for (let i = start; i <= end; i++) {
-        if (i >= 1 && i <= totalPages) pageNums.push(i - 1);
-      }
-    } else {
-      pageNums = pageRange.split(',').map((n) => parseInt(n.trim(), 10) - 1).filter((n) => n >= 0 && n < totalPages);
-    }
-    if (pageNums.length === 0) pageNums = [0];
+    const rangeStr = ranges || pageRange || '1';
+    const parts = rangeStr.split(',');
+    const pageNums = [];
 
+    parts.forEach((part) => {
+      const trimmed = part.trim();
+      if (trimmed.includes('-')) {
+        const [start, end] = trimmed.split('-').map((n) => parseInt(n.trim(), 10));
+        if (!isNaN(start) && !isNaN(end)) {
+          for (let i = start; i <= end; i++) {
+            if (i >= 1 && i <= totalPages) pageNums.push(i - 1);
+          }
+        }
+      } else {
+        const p = parseInt(trimmed, 10);
+        if (!isNaN(p) && p >= 1 && p <= totalPages) {
+          pageNums.push(p - 1);
+        }
+      }
+    });
+
+    if (pageNums.length === 0) pageNums.push(0);
+
+    const newDoc = await PDFDocument.create();
     const copiedPages = await newDoc.copyPages(srcDoc, pageNums);
     copiedPages.forEach((p) => newDoc.addPage(p));
 
@@ -845,7 +857,8 @@ router.post('/pdf/ai-qa', async (req, res) => {
  */
 router.post('/pdf/remove-pages', async (req, res) => {
   try {
-    const { fileId, pagesToRemove = '' } = req.body;
+    const { fileId, pagesToRemove, pages } = req.body;
+    const targetPagesStr = pagesToRemove || pages || '';
     const record = getValidFileMetadata(req.sessionId, fileId);
     if (!record) return res.status(404).json({ error: 'File not found or expired.' });
 
@@ -854,7 +867,7 @@ router.post('/pdf/remove-pages', async (req, res) => {
     const totalPages = srcDoc.getPageCount();
 
     const removeIndices = new Set(
-      pagesToRemove.split(',')
+      targetPagesStr.split(',')
         .map(n => parseInt(n.trim(), 10) - 1)
         .filter(n => !isNaN(n) && n >= 0 && n < totalPages)
     );
@@ -887,7 +900,8 @@ router.post('/pdf/remove-pages', async (req, res) => {
  */
 router.post('/pdf/extract-pages', async (req, res) => {
   try {
-    const { fileId, pageRange = '1' } = req.body;
+    const { fileId, pageRange, pages } = req.body;
+    const targetRange = pageRange || pages || '1';
     const record = getValidFileMetadata(req.sessionId, fileId);
     if (!record) return res.status(404).json({ error: 'File not found.' });
 
@@ -896,8 +910,8 @@ router.post('/pdf/extract-pages', async (req, res) => {
     const totalPages = srcDoc.getPageCount();
 
     let pageNums = [];
-    if (pageRange.includes('-')) {
-      const [start, end] = pageRange.split('-').map(n => parseInt(n.trim(), 10));
+    if (targetRange.includes('-')) {
+      const [start, end] = targetRange.split('-').map(n => parseInt(n.trim(), 10));
       for (let i = start; i <= end; i++) {
         if (i >= 1 && i <= totalPages) pageNums.push(i - 1);
       }
@@ -924,7 +938,8 @@ router.post('/pdf/extract-pages', async (req, res) => {
  */
 router.post('/pdf/organize', async (req, res) => {
   try {
-    const { fileId, pageOrder = [] } = req.body;
+    const { fileId, pageOrder, pageOrders } = req.body;
+    const orderInput = pageOrders || pageOrder || [];
     const record = getValidFileMetadata(req.sessionId, fileId);
     if (!record) return res.status(404).json({ error: 'File not found.' });
 
@@ -932,7 +947,11 @@ router.post('/pdf/organize', async (req, res) => {
     const srcDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
     const totalPages = srcDoc.getPageCount();
 
-    let indices = pageOrder.map(n => Number(n)).filter(n => n >= 0 && n < totalPages);
+    let indices = orderInput
+      .map(n => Number(n))
+      .map(n => (n >= 1 && n <= totalPages ? n - 1 : n))
+      .filter(n => !isNaN(n) && n >= 0 && n < totalPages);
+
     if (indices.length === 0) {
       indices = Array.from({ length: totalPages }, (_, i) => i);
     }
@@ -952,8 +971,9 @@ router.post('/pdf/organize', async (req, res) => {
 
 /**
  * POST /api/pdf/jpg-to-pdf
+ * POST /api/pdf/image-to-pdf
  */
-router.post('/pdf/jpg-to-pdf', async (req, res) => {
+const handleJpgToPdf = async (req, res) => {
   try {
     const { fileId, fileIds } = req.body;
     const ids = fileIds || (fileId ? [fileId] : []);
@@ -986,113 +1006,14 @@ router.post('/pdf/jpg-to-pdf', async (req, res) => {
     console.error('JPG to PDF Error:', err);
     res.status(500).json({ error: 'Failed to convert images to PDF: ' + err.message });
   }
-});
+};
 
-/**
- * POST /api/pdf/word-to-pdf
- */
-router.post('/pdf/word-to-pdf', async (req, res) => {
-  try {
-    const { fileId } = req.body;
-    const record = getValidFileMetadata(req.sessionId, fileId);
-    if (!record) return res.status(404).json({ error: 'File not found.' });
+router.post('/pdf/jpg-to-pdf', handleJpgToPdf);
+router.post('/pdf/image-to-pdf', handleJpgToPdf);
 
-    const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([595, 842]);
-    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-    page.drawText('Converted Word Document', { x: 50, y: 790, size: 22, font: fontBold, color: rgb(0.1, 0.2, 0.5) });
-    page.drawText(`Source File: ${record.metadata.originalName}`, { x: 50, y: 760, size: 12, font: fontRegular, color: rgb(0.3, 0.3, 0.4) });
-    page.drawText('Document content formatted and preserved cleanly via OmniPDF Engine.', { x: 50, y: 730, size: 11, font: fontRegular, color: rgb(0.2, 0.2, 0.2) });
 
-    const bytes = await pdfDoc.save();
-    const outName = `${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.pdf`;
-    const meta = saveUserFile(req.sessionId, Buffer.from(bytes), outName, 'application/pdf');
 
-    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to convert Word document to PDF: ' + err.message });
-  }
-});
-
-/**
- * POST /api/pdf/ppt-to-pdf
- */
-router.post('/pdf/ppt-to-pdf', async (req, res) => {
-  try {
-    const { fileId } = req.body;
-    const record = getValidFileMetadata(req.sessionId, fileId);
-    if (!record) return res.status(404).json({ error: 'File not found.' });
-
-    const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([842, 595]); // Landscape presentation page
-    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
-
-    page.drawText('Presentation Slides', { x: 60, y: 530, size: 24, font: fontBold, color: rgb(0.8, 0.2, 0.1) });
-    page.drawText(`Slide Deck: ${record.metadata.originalName}`, { x: 60, y: 490, size: 14, font: fontRegular });
-
-    const bytes = await pdfDoc.save();
-    const outName = `${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.pdf`;
-    const meta = saveUserFile(req.sessionId, Buffer.from(bytes), outName, 'application/pdf');
-
-    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to convert presentation to PDF: ' + err.message });
-  }
-});
-
-/**
- * POST /api/pdf/excel-to-pdf
- */
-router.post('/pdf/excel-to-pdf', async (req, res) => {
-  try {
-    const { fileId } = req.body;
-    const record = getValidFileMetadata(req.sessionId, fileId);
-    if (!record) return res.status(404).json({ error: 'File not found.' });
-
-    const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([842, 595]);
-    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
-
-    page.drawText('Excel Spreadsheet Export', { x: 50, y: 540, size: 20, font: fontBold, color: rgb(0.1, 0.5, 0.2) });
-    page.drawText(`Sheet Source: ${record.metadata.originalName}`, { x: 50, y: 510, size: 12, font: fontRegular });
-
-    const bytes = await pdfDoc.save();
-    const outName = `${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.pdf`;
-    const meta = saveUserFile(req.sessionId, Buffer.from(bytes), outName, 'application/pdf');
-
-    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to convert spreadsheet to PDF: ' + err.message });
-  }
-});
-
-/**
- * POST /api/pdf/html-to-pdf
- */
-router.post('/pdf/html-to-pdf', async (req, res) => {
-  try {
-    const { htmlCode = '<h1>HTML Document</h1>' } = req.body;
-    const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([595, 842]);
-    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
-
-    page.drawText('HTML Rendered PDF Document', { x: 50, y: 790, size: 20, font: fontBold, color: rgb(0.1, 0.3, 0.6) });
-    const cleanText = htmlCode.replace(/<[^>]*>?/gm, '');
-    page.drawText(cleanText.substring(0, 500), { x: 50, y: 750, size: 11, font: fontRegular });
-
-    const bytes = await pdfDoc.save();
-    const meta = saveUserFile(req.sessionId, Buffer.from(bytes), `HTML_Export_${Date.now()}.pdf`, 'application/pdf');
-
-    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to convert HTML to PDF: ' + err.message });
-  }
-});
 
 /**
  * POST /api/pdf/add-page-numbers
@@ -1739,6 +1660,31 @@ router.post('/pdf/ocr', async (req, res) => {
   } catch (err) {
     console.error('OCR Error:', err);
     res.status(500).json({ error: 'Failed to run OCR: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/pdf/html-to-pdf
+ */
+router.post('/pdf/html-to-pdf', async (req, res) => {
+  try {
+    const { htmlCode = '<h1>HTML Document</h1>' } = req.body;
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595, 842]);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+    page.drawText('HTML Rendered PDF Document', { x: 50, y: 790, size: 20, font: fontBold, color: rgb(0.1, 0.3, 0.6) });
+    const cleanText = htmlCode.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
+    page.drawText(cleanText.substring(0, 500), { x: 50, y: 750, size: 11, font: fontRegular });
+
+    const bytes = await pdfDoc.save();
+    const meta = saveUserFile(req.sessionId, Buffer.from(bytes), `HTML_Export_${Date.now()}.pdf`, 'application/pdf');
+
+    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
+  } catch (err) {
+    console.error('HTML to PDF Error:', err);
+    res.status(500).json({ error: 'Failed to convert HTML to PDF: ' + err.message });
   }
 });
 

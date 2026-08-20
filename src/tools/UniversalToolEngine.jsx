@@ -560,6 +560,9 @@ export default function UniversalToolEngine({ tool, onBack }) {
                       </div>
                     </div>
 
+                    <p className="text-[11px] text-amber-300 bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
+                      ⚠️ Basic word-for-word substitution — not a full translation, grammar will not be correct for most sentences.
+                    </p>
                     <p className="text-[11px] text-emerald-400 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
                       🔒 Local offline engine: processes document 100% locally with zero external API calls or billing risk.
                     </p>
@@ -705,6 +708,9 @@ export default function UniversalToolEngine({ tool, onBack }) {
                         className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none focus:border-rose-500 font-medium"
                       />
                     </div>
+                    <p className="text-[11px] text-amber-300 bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
+                      ⚠️ Visual redaction only — underlying text layer is covered with black blocks but is not destructively purged from vector streams.
+                    </p>
                   </div>
                 )}
 

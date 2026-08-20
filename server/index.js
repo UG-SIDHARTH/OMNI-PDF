@@ -91,8 +91,8 @@ function runScheduledCleanup() {
       }
 
       // If session directory is empty, remove it
-      if (fs.readdirSync(sessionPath).length === 0) {
-        fs.rmdirSync(sessionPath);
+      if (fs.existsSync(sessionPath) && fs.readdirSync(sessionPath).length === 0) {
+        try { fs.rmdirSync(sessionPath); } catch (e) {}
       }
     }
 
