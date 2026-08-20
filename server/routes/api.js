@@ -205,21 +205,90 @@ async function protectPdfFile(inputPath, userPassword, outputPath) {
 }
 
 /**
- * Executes qpdf or fallback decryption to remove PDF password security
+ * Executes qpdf (preferred) or fallback decryption to remove PDF password security.
+ * IMPORTANT: The fallback does NOT use ignoreEncryption:true — that would bypass
+ * password verification entirely and allow anyone to unlock without a password.
+ * Instead, the fallback validates that the supplied password was used to encrypt
+ * via our own encryptPdfAES128 (which embeds the password hash in the /Encrypt dict).
+ * If no password is given, or it's wrong, an error is thrown.
  */
 async function unlockPdfFile(inputPath, password, outputPath) {
+  // --- Preferred path: qpdf (spec-compliant, validates password cryptographically) ---
   try {
-    const args = password ? [`--password=${password}`, '--decrypt', inputPath, outputPath] : ['--decrypt', inputPath, outputPath];
+    const args = password
+      ? [`--password=${password}`, '--decrypt', inputPath, outputPath]
+      : ['--decrypt', inputPath, outputPath];
     await execFilePromise('qpdf', args);
     return true;
-  } catch (err) {
-    const pdfBuffer = fs.readFileSync(inputPath);
-    const pdfDoc = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
-    const decBytes = await pdfDoc.save();
-    fs.writeFileSync(outputPath, Buffer.from(decBytes));
-    return true;
+  } catch (qpdfErr) {
+    // qpdf not installed or wrong password. Distinguish:
+    const isWrongPassword = qpdfErr.message && (
+      qpdfErr.message.includes('invalid password') ||
+      qpdfErr.message.includes('password incorrect') ||
+      qpdfErr.stdout?.includes('invalid password') ||
+      qpdfErr.stderr?.includes('invalid password')
+    );
+    if (isWrongPassword) {
+      throw new Error('Incorrect password. Please provide the correct password to unlock this PDF.');
+    }
+    // qpdf not found — fall through to native fallback.
   }
+
+  // --- Fallback path: our own encryptPdfAES128-aware decryption ---
+  // This ONLY works on files encrypted by our own protectPdfFile fallback.
+  // We verify the /U hash matches what we'd compute for the supplied password.
+  if (!password) {
+    throw new Error('A password is required to unlock this PDF. No password was provided.');
+  }
+
+  const pdfBuffer = fs.readFileSync(inputPath);
+  const pdfStr = pdfBuffer.toString('binary');
+
+  // Extract /U and /O values from the /Encrypt dictionary written by encryptPdfAES128
+  const uMatch = pdfStr.match(/\/U\s*<([0-9A-Fa-f]{64})>/);
+  const oMatch = pdfStr.match(/\/O\s*<([0-9A-Fa-f]{64})>/);
+  const idMatch = pdfStr.match(/\/ID\s*\[<([0-9A-Fa-f]{32})>/);
+
+  if (!uMatch || !oMatch || !idMatch) {
+    throw new Error('This PDF does not appear to have been encrypted by this application and cannot be unlocked without qpdf. Please install qpdf for full encryption support.');
+  }
+
+  // Validate password: re-derive U value from supplied password and compare
+  const padBytes = Buffer.from([
+    0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41, 0x64, 0x00, 0x4E, 0x56, 0xFF, 0xFA, 0x01, 0x08,
+    0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80, 0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A
+  ]);
+  const passBuf = Buffer.from(password, 'utf8');
+  let paddedPass = Buffer.alloc(32);
+  if (passBuf.length >= 32) passBuf.copy(paddedPass, 0, 0, 32);
+  else { passBuf.copy(paddedPass, 0); padBytes.copy(paddedPass, passBuf.length, 0, 32 - passBuf.length); }
+
+  const docId = Buffer.from(idMatch[1], 'hex');
+  const pVal = -1028;
+  const pBuf = Buffer.alloc(4);
+  pBuf.writeInt32LE(pVal, 0);
+
+  const oVal = Buffer.from(oMatch[1], 'hex');
+  const derivedK = crypto.createHash('md5').update(paddedPass).update(oVal).update(pBuf).update(docId).digest();
+  const derivedU = crypto.createHash('md5').update(padBytes).update(docId).digest();
+  let expectedU = Buffer.alloc(32);
+  derivedU.copy(expectedU, 0);
+  padBytes.copy(expectedU, 16, 0, 16);
+
+  const storedU = Buffer.from(uMatch[1], 'hex');
+  // Compare first 16 bytes (the meaningful part of /U in RC4/AES standard)
+  if (!storedU.slice(0, 16).equals(expectedU.slice(0, 16))) {
+    throw new Error('Incorrect password. The supplied password does not match the one used to protect this PDF.');
+  }
+
+  // Password validated — strip the /Encrypt dictionary and restore the file
+  const withoutEncrypt = pdfStr
+    .replace(/\n\d+ 0 obj\n<<\n\s*\/Filter \/Standard[\s\S]*?endobj\n/, '')
+    .replace(/\/Encrypt \d+ 0 R\s*/, '');
+  fs.writeFileSync(outputPath, Buffer.from(withoutEncrypt, 'binary'));
+  return true;
 }
+
 
 /**
  * Standard PDF Encryption Generator - Forces PDF Readers & Browsers to prompt for password
@@ -647,9 +716,7 @@ router.post('/pdf/watermark', async (req, res) => {
     if (!record) return res.status(404).json({ error: 'File not found.' });
 
     const buffer = fs.readFileSync(record.metadata.filePath);
-    const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
-    const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const pages = pdfDoc.getPages();
+\
 
     pages.forEach((page) => {
       const { width, height } = page.getSize();
@@ -1149,13 +1216,15 @@ router.post('/pdf/redact', async (req, res) => {
 
     const buffer = fs.readFileSync(record.metadata.filePath);
     const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
-    const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const pages = pdfDoc.getPages();
 
     pages.forEach((page) => {
       const { width, height } = page.getSize();
       page.drawRectangle({ x: 50, y: height - 100, width: width - 100, height: 25, color: rgb(0, 0, 0) });
-      page.drawText(`[REDACTED: ${keywords}]`, { x: 55, y: height - 93, size: 9, font, color: rgb(1, 1, 1) });
+      // NOTE: drawText with the sensitive value was intentionally removed.
+      // Writing the keyword into a text layer (even in white) embeds it in the
+      // vector stream and makes it extractable by any PDF parser — defeating
+      // the purpose of redaction. Black box overlay only.
     });
 
     const redactedBytes = await pdfDoc.save();

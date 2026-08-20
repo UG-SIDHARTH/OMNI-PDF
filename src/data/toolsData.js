@@ -253,7 +253,7 @@ export const TOOL_CATEGORIES = [
       {
         id: 'protect-pdf',
         name: 'Protect PDF',
-        description: 'Encrypt PDF files with a strong password to prevent unauthorized access.',
+        description: 'Add password protection to PDF files. Uses qpdf AES-256 encryption when available. See tool notes for encryption details.',
         icon: 'Lock',
         isWorking: true,
         accept: '.pdf'
@@ -269,7 +269,7 @@ export const TOOL_CATEGORIES = [
       {
         id: 'redact-pdf',
         name: 'Redact PDF',
-        description: 'Permanently remove or block out sensitive text and graphics in PDFs.',
+        description: 'Block out sensitive areas in PDFs with black overlays. Note: this is visual overlay only — underlying text is not removed from the file\'s content stream.',
         icon: 'EyeOff',
         isWorking: true,
         accept: '.pdf'

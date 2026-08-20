@@ -653,9 +653,16 @@ export default function UniversalToolEngine({ tool, onBack }) {
                         placeholder="Confirm password..."
                         className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none focus:border-rose-500 font-medium"
                       />
+                      <p className="text-xs text-amber-400 mt-2 leading-relaxed">
+                        ⚠️ Encryption uses qpdf AES-256 when qpdf is installed on the server.
+                        If qpdf is unavailable, a non-standard fallback is used whose password
+                        hash derivation does not fully conform to the PDF 1.7 specification —
+                        it may not be accepted by all PDF readers.
+                      </p>
                     </div>
                   </div>
                 )}
+
 
                 {/* Controls for Unlock PDF */}
                 {toolId === 'unlock-pdf' && (
