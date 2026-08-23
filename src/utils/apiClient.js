@@ -9,6 +9,15 @@ function getSessionId() {
   return id;
 }
 
+export function isNativeApp() {
+  if (typeof window !== 'undefined') {
+    if (window.omniDesktop?.isDesktop) return true;
+    if (window.Capacitor?.isNativePlatform && window.Capacitor.isNativePlatform()) return true;
+    if (window.location.protocol === 'file:' || window.location.origin === 'null') return true;
+  }
+  return false;
+}
+
 export function getApiBaseUrl() {
   if (typeof window !== 'undefined') {
     // 1. Explicitly exposed Electron desktop server URL

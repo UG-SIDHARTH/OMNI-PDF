@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TOOL_CATEGORIES } from '../data/toolsData';
+import { isNativeApp } from '../utils/apiClient';
 import {
   Heart, ChevronDown, ChevronUp, Menu, X, Search, Layers,
   Files, Scissors, FileX, FileSpreadsheet, LayoutGrid, Scan,
@@ -7,7 +8,7 @@ import {
   Table, Globe, FileImage, FileType, MonitorPlay, Grid,
   Archive, RotateCw, Hash, Stamp, Crop, Edit3,
   CheckSquare, Unlock, Lock, PenTool, EyeOff, Columns,
-  Sparkles, Languages, FileCode2, Download, Monitor, Smartphone
+  Sparkles, Languages, FileCode2, Download, Monitor, Smartphone, ShieldCheck
 } from 'lucide-react';
 
 const ICON_MAP = {
@@ -216,14 +217,21 @@ export default function Navbar({ onHome, onSelectTool, searchQuery, setSearchQue
 
           {/* Right Action Area */}
           <div className="flex items-center gap-2.5">
-            {/* Download App Button */}
-            <button
-              onClick={onOpenDownloadModal}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-xs font-extrabold shadow-md shadow-rose-600/20 hover:scale-[1.02] transition"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Download App</span>
-            </button>
+            {/* Download App Button (only on Web, hidden in App) */}
+            {!isNativeApp() ? (
+              <button
+                onClick={onOpenDownloadModal}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-xs font-extrabold shadow-md shadow-rose-600/20 hover:scale-[1.02] transition"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download App</span>
+              </button>
+            ) : (
+              <div className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-bold">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Offline Engine Active</span>
+              </div>
+            )}
 
             {!activeTool && (
               <div className="relative hidden sm:block w-40 xl:w-56">
@@ -293,17 +301,19 @@ export default function Navbar({ onHome, onSelectTool, searchQuery, setSearchQue
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div className="lg:hidden bg-slate-900 border-b border-slate-800 p-4 space-y-4 max-h-[80vh] overflow-y-auto">
-          {/* Download App Mobile CTA */}
-          <button
-            onClick={() => {
-              setMobileMenuOpen(false);
-              if (onOpenDownloadModal) onOpenDownloadModal();
-            }}
-            className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-600/25"
-          >
-            <Download className="w-4 h-4" />
-            <span>Download Desktop & Mobile App</span>
-          </button>
+          {/* Download App Mobile CTA (Web only) */}
+          {!isNativeApp() && (
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                if (onOpenDownloadModal) onOpenDownloadModal();
+              }}
+              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-600/25"
+            >
+              <Download className="w-4 h-4" />
+              <span>Download Desktop & Mobile App</span>
+            </button>
+          )}
 
           <div className="flex gap-2">
             <button
