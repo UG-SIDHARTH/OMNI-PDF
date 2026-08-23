@@ -1,6 +1,11 @@
 node_modules/
 dist/
 storage/
+release/
+android/.gradle/
+android/app/build/
+android/build/
 .env
 .DS_Store
 *.log
+

@@ -1,0 +1,22 @@
+{
+  "appId": "com.omnipdf.app",
+  "appName": "OmniPDF",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#020617",
+      "showSpinner": false
+    }
+  }
+}

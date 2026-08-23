@@ -1,0 +1,36 @@
+{
+  "name": "OmniPDF Pro Suite",
+  "short_name": "OmniPDF",
+  "description": "Complete suite of 30+ PDF and Image processing tools with 100% privacy and secure cleanup.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Merge PDF",
+      "url": "/#merge-pdf",
+      "description": "Combine multiple PDFs into one"
+    },
+    {
+      "name": "Compress PDF",
+      "url": "/#compress-pdf",
+      "description": "Smart PDF file size reduction"
+    },
+    {
+      "name": "AI Background Remover",
+      "url": "/#background-remover",
+      "description": "Instantly isolate and remove image backgrounds"
+    }
+  ]
+}

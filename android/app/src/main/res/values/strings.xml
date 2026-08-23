@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">OmniPDF</string>
+    <string name="title_activity_main">OmniPDF</string>
+    <string name="package_name">com.omnipdf.app</string>
+    <string name="custom_url_scheme">com.omnipdf.app</string>
+</resources>
