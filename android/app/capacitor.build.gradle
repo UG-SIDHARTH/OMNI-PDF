@@ -7,9 +7,7 @@ android {
   }
 }
 
-if (file("../capacitor-cordova-android-plugins/cordova.variables.gradle").exists()) {
-    apply from: "../capacitor-cordova-android-plugins/cordova.variables.gradle"
-}
+apply from: "../capacitor-cordova-android-plugins/cordova.variables.gradle"
 dependencies {
 
 
