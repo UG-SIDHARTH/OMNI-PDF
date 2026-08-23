@@ -64,7 +64,7 @@ export default function DownloadAppModal({ isOpen, onClose }) {
               <h2 className="text-lg font-extrabold text-white flex items-center gap-2">
                 Download OmniPDF Apps
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30 uppercase">
-                  v0.3.4 Pro
+                  v0.3.5 Pro
                 </span>
               </h2>
               <p className="text-xs text-slate-400">

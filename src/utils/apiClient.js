@@ -1,4 +1,5 @@
 // Centralized API Client with Session Persistence, Error Handling & Desktop/Web Protocol Resolution
+import { saveFileUniversal } from './fileDownloader';
 
 function getSessionId() {
   let id = localStorage.getItem('omnipdf_session_id');
@@ -90,16 +91,11 @@ export async function downloadFile(fileId, filename = 'document.pdf') {
     }
 
     const blob = await res.blob();
-    const blobUrl = URL.createObjectURL(blob);
-
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    await saveFileUniversal({
+      blob,
+      filename,
+      mimeType: blob.type || 'application/pdf'
+    });
   } catch (err) {
     console.error('Download error:', err);
     alert('Failed to download file: ' + err.message);

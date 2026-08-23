@@ -4,10 +4,11 @@ import FileUploader from '../components/FileUploader';
 import CountdownTimer from '../components/CountdownTimer';
 import SelectableCard from '../components/shared/SelectableCard';
 import PrimaryActionButton from '../components/shared/PrimaryActionButton';
+import { saveFileUniversal } from '../utils/fileDownloader';
 import { 
   Sparkles, Download, RefreshCw, Palette, Image as ImageIcon, 
   ArrowLeftRight, Check, AlertCircle, Eraser, RotateCcw, Undo, 
-  Eye, Wand2, Crop, ZoomIn, ZoomOut, Maximize2, Users, Sliders, Zap, Shield
+  Eye, Wand2, Crop, ZoomIn, ZoomOut, Maximize2, Users, Sliders, Zap, Shield, HelpCircle
 } from 'lucide-react';
 
 export default function BackgroundRemover() {
@@ -66,31 +67,105 @@ export default function BackgroundRemover() {
 
   const processImage = async (file, mode = modelMode) => {
     setIsProcessing(true);
-    const modeLabel = mode === 'human' ? 'People & Group Photo Model (u2net_human_seg)' : mode === 'fast' ? 'Fast Model (u2netp)' : 'General Model (u2net)';
-    setProgressStatus(`Initializing ${modeLabel}...`);
+    const modeLabel = mode === 'human' ? 'People & Group Model' : mode === 'fast' ? 'Fast Model' : 'General Model';
+    setProgressStatus(`Connecting to AI segmentation engine (${modeLabel})...`);
     setErrorMsg(null);
 
     try {
-      const blob = await removeBackground(file, {
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('AI Model segmentation timed out (45s). The network or security restrictions may have delayed downloading the ONNX weights. You can retry with Fast Mode or use Instant Keying below.'));
+        }, 45000);
+      });
+
+      const executionPromise = removeBackground(file, {
         model: mode === 'fast' ? 'small' : 'medium',
         progress: (key, current, total) => {
           if (total) {
             const pct = Math.round((current / total) * 100);
-            setProgressStatus(`Processing AI Segmentation (${pct}%)...`);
+            setProgressStatus(`Downloading Model Weights / Processing AI (${pct}%)...`);
           } else {
-            setProgressStatus(`Analyzing AI foreground & edges...`);
+            setProgressStatus(`Segmenting foreground & alpha edges...`);
           }
         }
       });
 
+      const blob = await Promise.race([executionPromise, timeoutPromise]);
       const resultUrl = URL.createObjectURL(blob);
       setProcessedUrl(resultUrl);
       setIsProcessing(false);
     } catch (err) {
       console.error('Background removal error:', err);
-      setErrorMsg(`Failed to remove background: ${err.message || 'Error processing AI model'}`);
+      setErrorMsg(err.message || 'Failed to process AI background removal.');
       setIsProcessing(false);
     }
+  };
+
+  const handleInstantKeyingFallback = () => {
+    if (!originalUrl) return;
+    setIsProcessing(true);
+    setProgressStatus('Applying instant edge & chroma thresholding...');
+    setErrorMsg(null);
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+
+        const imgData = ctx.getImageData(0, 0, c.width, c.height);
+        const data = imgData.data;
+        
+        // Sample corner pixels to estimate dominant background color
+        const corners = [
+          [0, 0],
+          [Math.max(0, c.width - 1), 0],
+          [0, Math.max(0, c.height - 1)],
+          [Math.max(0, c.width - 1), Math.max(0, c.height - 1)]
+        ];
+        let bgR = 0, bgG = 0, bgB = 0;
+        corners.forEach(([x, y]) => {
+          const idx = (y * c.width + x) * 4;
+          bgR += data[idx];
+          bgG += data[idx + 1];
+          bgB += data[idx + 2];
+        });
+        bgR /= 4; bgG /= 4; bgB /= 4;
+
+        const tolerance = 38;
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          const dist = Math.sqrt((r - bgR) ** 2 + (g - bgG) ** 2 + (b - bgB) ** 2);
+          if (dist < tolerance) {
+            data[i + 3] = 0;
+          } else if (dist < tolerance + 15) {
+            data[i + 3] = Math.round(((dist - tolerance) / 15) * 255);
+          }
+        }
+        ctx.putImageData(imgData, 0, 0);
+
+        c.toBlob((blob) => {
+          if (blob) {
+            const resultUrl = URL.createObjectURL(blob);
+            setProcessedUrl(resultUrl);
+          }
+          setIsProcessing(false);
+        }, 'image/png');
+      } catch (keyErr) {
+        console.error('Keying fallback error:', keyErr);
+        setErrorMsg('Could not process canvas fallback.');
+        setIsProcessing(false);
+      }
+    };
+    img.onerror = () => {
+      setErrorMsg('Failed to load image for fallback.');
+      setIsProcessing(false);
+    };
+    img.src = originalUrl;
   };
 
   // Initialize interactive Canvas when processedUrl changes
@@ -371,12 +446,11 @@ export default function BackgroundRemover() {
   };
 
   const triggerDownload = (dataUrl, filename) => {
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    saveFileUniversal({
+      blobUrl: dataUrl,
+      filename,
+      mimeType: 'image/png'
+    });
   };
 
   const resetAll = () => {
@@ -423,10 +497,9 @@ export default function BackgroundRemover() {
               },
               {
                 id: 'general',
-                title: 'General Subject',
-                desc: 'Balanced model for products, animals, vehicles & objects (u2net)',
-                icon: Shield,
-                badge: 'Standard'
+                title: 'General Objects',
+                desc: 'Products, animals, cars & graphics (u2net)',
+                icon: Wand2
               },
               {
                 id: 'fast',
@@ -501,9 +574,40 @@ export default function BackgroundRemover() {
           )}
 
           {errorMsg && (
-            <div className="p-4 rounded-xl bg-rose-950/90 border border-rose-800 text-rose-200 text-sm flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0" />
-              <span>{errorMsg}</span>
+            <div className="glass-panel p-6 rounded-3xl border border-rose-800/80 bg-rose-950/40 space-y-4">
+              <div className="flex items-start gap-3 text-rose-200 text-sm">
+                <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h4 className="font-bold text-white">AI Processing Notice</h4>
+                  <p className="text-xs text-rose-300 leading-relaxed">{errorMsg}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setModelMode('fast');
+                    processImage(selectedFile, 'fast');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white text-xs font-bold flex items-center gap-2 transition"
+                >
+                  <Zap className="w-3.5 h-3.5" /> Retry with Fast Model
+                </button>
+
+                <button
+                  onClick={handleInstantKeyingFallback}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-2 transition"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Use Instant Edge Keying
+                </button>
+
+                <button
+                  onClick={() => processImage(selectedFile, modelMode)}
+                  className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-800 flex items-center gap-1.5 transition"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Try Again
+                </button>
+              </div>
             </div>
           )}
 

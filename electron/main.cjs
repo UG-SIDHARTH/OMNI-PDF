@@ -108,6 +108,37 @@ function createWindow() {
   });
 }
 
+// Native Desktop Save File Dialog handler
+ipcMain.handle('save-file', async (event, { filename, base64Data, mimeType }) => {
+  try {
+    const ext = path.extname(filename || '').toLowerCase() || '.pdf';
+    const filters = [];
+    if (ext === '.pdf') {
+      filters.push({ name: 'PDF Documents', extensions: ['pdf'] });
+    } else if (['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) {
+      filters.push({ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] });
+    }
+    filters.push({ name: 'All Files', extensions: ['*'] });
+
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Save Document',
+      defaultPath: filename || 'document.pdf',
+      filters
+    });
+
+    if (canceled || !filePath) {
+      return { success: false, canceled: true };
+    }
+
+    const buffer = Buffer.from(base64Data, 'base64');
+    await fs.promises.writeFile(filePath, buffer);
+    return { success: true, filePath };
+  } catch (err) {
+    console.error('[OmniPDF Desktop Save Error]:', err);
+    return { success: false, error: err.message };
+  }
+});
+
 // App lifecycle
 app.whenReady().then(async () => {
   await startEmbeddedServer();

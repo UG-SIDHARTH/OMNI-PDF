@@ -4,6 +4,8 @@ import CountdownTimer from '../components/CountdownTimer';
 import PrimaryActionButton from '../components/shared/PrimaryActionButton';
 import FormCheckbox from '../components/shared/FormCheckbox';
 import { apiFetch, downloadFile } from '../utils/apiClient';
+import { saveFileUniversal } from '../utils/fileDownloader';
+import { PDFDocument } from 'pdf-lib';
 import { Files, ArrowUp, ArrowDown, Trash2, Download, RefreshCw, AlertCircle, FileText, CheckCircle2, Plus } from 'lucide-react';
 
 export default function MergePdf() {
@@ -54,37 +56,47 @@ export default function MergePdf() {
     setErrorMsg(null);
 
     try {
-      const formData = new FormData();
-      fileList.forEach((file) => formData.append('files', file));
+      // 1. Client-Side High-Speed PDF Merge via pdf-lib
+      const mergedPdf = await PDFDocument.create();
 
-      const uploadRes = await apiFetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!uploadRes.ok) {
-        const errJson = await uploadRes.json();
-        throw new Error(errJson.error || 'Failed to upload PDF files.');
+      for (const file of fileList) {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+        const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+        copiedPages.forEach((page) => mergedPdf.addPage(page));
       }
 
-      const uploadData = await uploadRes.json();
-      const uploadedFileIds = uploadData.files.map((f) => f.fileId);
+      const mergedPdfBytes = await mergedPdf.save();
+      const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+      const outputFilename = `Merged_${fileList.length}_PDFs.pdf`;
+      const blobUrl = URL.createObjectURL(blob);
 
-      const mergeRes = await apiFetch('/api/pdf/merge', {
-        method: 'POST',
-        body: JSON.stringify({
-          fileIds: uploadedFileIds,
-          outputFilename: `Merged_${fileList.length}_PDFs.pdf`
-        }),
-      });
+      const localResult = {
+        blob,
+        blobUrl,
+        originalName: outputFilename,
+        size: mergedPdfBytes.length,
+        totalPages: mergedPdf.getPageCount(),
+        expiresAt: null
+      };
 
-      if (!mergeRes.ok) {
-        const errJson = await mergeRes.json();
-        throw new Error(errJson.error || 'Failed to merge PDF files.');
+      // 2. Optional background upload for server session persistence (non-blocking)
+      try {
+        const formData = new FormData();
+        formData.append('files', new File([blob], outputFilename, { type: 'application/pdf' }));
+        const uploadRes = await apiFetch('/api/upload', { method: 'POST', body: formData });
+        if (uploadRes.ok) {
+          const uploadJson = await uploadRes.json();
+          if (uploadJson.files && uploadJson.files[0]) {
+            localResult.fileId = uploadJson.files[0].fileId;
+            localResult.expiresAt = uploadJson.files[0].expiresAt;
+          }
+        }
+      } catch (uploadErr) {
+        console.warn('Backend server offline, continuing with 100% offline client merge:', uploadErr);
       }
 
-      const mergeResult = await mergeRes.json();
-      setResultData(mergeResult);
+      setResultData(localResult);
       setIsProcessing(false);
     } catch (err) {
       console.error('Merge error:', err);
@@ -98,6 +110,20 @@ export default function MergePdf() {
     setResultData(null);
     setErrorMsg(null);
     setIsProcessing(false);
+  };
+
+  const handleDownload = () => {
+    if (!resultData) return;
+    if (resultData.blob || resultData.blobUrl) {
+      saveFileUniversal({
+        blob: resultData.blob,
+        blobUrl: resultData.blobUrl,
+        filename: resultData.originalName || 'Merged_Documents.pdf',
+        mimeType: 'application/pdf'
+      });
+    } else if (resultData.fileId) {
+      downloadFile(resultData.fileId, resultData.originalName);
+    }
   };
 
   return (
@@ -252,7 +278,7 @@ export default function MergePdf() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
             <button
-              onClick={() => downloadFile(resultData.fileId, resultData.originalName)}
+              onClick={handleDownload}
               className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-bold text-sm shadow-lg shadow-rose-600/25 flex items-center justify-center gap-2 transition"
             >
               <Download className="w-5 h-5" /> Download Merged PDF

@@ -6,6 +6,7 @@ import SelectableCard from '../components/shared/SelectableCard';
 import FormCheckbox from '../components/shared/FormCheckbox';
 import PrimaryActionButton from '../components/shared/PrimaryActionButton';
 import { downloadFile, apiFetch } from '../utils/apiClient';
+import { saveFileUniversal } from '../utils/fileDownloader';
 import { PDFDocument } from 'pdf-lib';
 import {
   Image as ImageIcon,
@@ -296,6 +297,7 @@ export default function ImageToPdf() {
             const fileRec = uploadJson.files[0];
             setResultData({
               isMerged: true,
+              blob,
               fileId: fileRec.fileId,
               originalName: fileRec.originalName,
               size: fileRec.size,
@@ -313,6 +315,7 @@ export default function ImageToPdf() {
         // Direct client fallback
         setResultData({
           isMerged: true,
+          blob,
           originalName: outputFilename,
           size: pdfBytes.length,
           totalPages: images.length,
@@ -348,6 +351,7 @@ export default function ImageToPdf() {
 
           generatedResults.push({
             name: singleName,
+            blob,
             size: pdfBytes.length,
             blobUrl: URL.createObjectURL(blob),
           });
@@ -368,16 +372,12 @@ export default function ImageToPdf() {
   };
 
   const handleDownloadSingle = (resObj) => {
-    if (resObj.fileId) {
-      downloadFile(resObj.fileId, resObj.originalName);
-    } else if (resObj.blobUrl) {
-      const link = document.createElement('a');
-      link.href = resObj.blobUrl;
-      link.download = resObj.originalName || 'converted.pdf';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
+    saveFileUniversal({
+      blob: resObj.blob,
+      blobUrl: resObj.blobUrl,
+      filename: resObj.originalName || resObj.name || 'converted.pdf',
+      mimeType: 'application/pdf'
+    });
   };
 
   const resetAll = () => {
