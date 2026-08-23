@@ -1,46 +1,148 @@
-name: Build & Publish Release
+name: Build & Release Binaries (APK & EXE)
 
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Tag for the release (e.g. v0.3)'
+        required: true
+        default: 'v0.3'
 
 permissions:
   contents: write
 
 jobs:
-  build-and-release:
+  # ----------------------------------------------------
+  # 1. BUILD WINDOWS DESKTOP EXECUTABLE (.EXE)
+  # ----------------------------------------------------
+  build-windows:
+    name: Build Windows Desktop (.exe)
     runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: npm ci
 
-      - name: Build Web Application
+      - name: Build Web Frontend
         run: npm run build
 
-      - name: Build Windows Desktop App (.exe)
+      - name: Build Windows .exe (Installer & Portable)
         run: npx electron-builder --win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create GitHub Release with Binaries
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: OmniPDF ${{ github.ref_name }}
+          name: windows-release
+          path: |
+            release/*.exe
+            release/*.blockmap
+
+  # ----------------------------------------------------
+  # 2. BUILD ANDROID MOBILE PACKAGE (.APK)
+  # ----------------------------------------------------
+  build-android:
+    name: Build Android Mobile (.apk)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Web Frontend
+        run: npm run build
+
+      - name: Sync Capacitor Android
+        run: npx cap sync android
+
+      - name: Build Android APK with Gradle
+        run: |
+          cd android
+          chmod +x ./gradlew
+          ./gradlew assembleDebug
+
+      - name: Rename and Prepare APK
+        run: |
+          mkdir -p output-apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk output-apk/OmniPDF-v0.3-debug.apk
+
+      - name: Upload Android Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: output-apk/*.apk
+
+  # ----------------------------------------------------
+  # 3. PUBLISH BOTH BINARIES TO GITHUB RELEASE
+  # ----------------------------------------------------
+  publish-release:
+    name: Publish Release Assets to GitHub
+    needs: [build-windows, build-android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: release-assets/windows
+
+      - name: Download Android Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: android-release
+          path: release-assets/android
+
+      - name: Determine Release Tag
+        id: get_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "TAG_NAME=${{ github.event.inputs.release_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Binaries to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_tag.outputs.TAG_NAME }}
+          name: OmniPDF ${{ steps.get_tag.outputs.TAG_NAME }}
           draft: false
           prerelease: false
           generate_release_notes: true
           files: |
-            release/*.exe
-            release/*.zip
+            release-assets/windows/*.exe
+            release-assets/android/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
