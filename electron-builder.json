@@ -11,6 +11,9 @@
     "package.json",
     "public/**/*"
   ],
+  "asarUnpack": [
+    "server/**/*"
+  ],
   "extraResources": [
     {
       "from": "storage",

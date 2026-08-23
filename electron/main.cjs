@@ -1,14 +1,14 @@
 const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
 const path = require('path');
-const { fork } = require('child_process');
+const fs = require('fs');
+const url = require('url');
 const http = require('http');
 
 let mainWindow = null;
-let serverProcess = null;
 const SERVER_PORT = 8092;
 
 // Function to check if local server is responsive
-function checkServerReady(port, retries = 30, delay = 500) {
+function checkServerReady(port, retries = 30, delay = 250) {
   return new Promise((resolve) => {
     let attempts = 0;
     const check = () => {
@@ -35,32 +35,32 @@ function checkServerReady(port, retries = 30, delay = 500) {
   });
 }
 
-// Start embedded background Node.js API server for 100% offline PDF processing
-function startEmbeddedServer() {
-  const serverScript = path.join(__dirname, '..', 'server', 'index.js');
+// Start embedded Node.js backend inside the main Electron process for 100% offline PDF processing
+async function startEmbeddedServer() {
+  const userDataPath = app.getPath('userData');
+  const storageDir = path.join(userDataPath, 'storage', 'uploads');
+  if (!fs.existsSync(storageDir)) {
+    fs.mkdirSync(storageDir, { recursive: true });
+  }
+
+  process.env.STORAGE_DIR = storageDir;
+  process.env.PORT = String(SERVER_PORT);
+  process.env.NODE_ENV = app.isPackaged ? 'production' : 'development';
+
   try {
-    serverProcess = fork(serverScript, [], {
-      env: {
-        ...process.env,
-        PORT: String(SERVER_PORT),
-        NODE_ENV: app.isPackaged ? 'production' : 'development'
-      },
-      silent: true
-    });
+    // Resolve server file whether packaged or in development
+    let serverScript = path.join(__dirname, '..', 'server', 'index.js');
+    const unpackedServerScript = path.join(process.resourcesPath || '', 'app.asar.unpacked', 'server', 'index.js');
+    
+    if (app.isPackaged && fs.existsSync(unpackedServerScript)) {
+      serverScript = unpackedServerScript;
+    }
 
-    serverProcess.stdout?.on('data', (data) => {
-      console.log(`[OmniPDF Server]: ${data}`);
-    });
-
-    serverProcess.stderr?.on('data', (data) => {
-      console.error(`[OmniPDF Server Error]: ${data}`);
-    });
-
-    serverProcess.on('exit', (code) => {
-      console.log(`[OmniPDF Server] Exited with code ${code}`);
-    });
+    const fileUrl = url.pathToFileURL(serverScript).href;
+    await import(fileUrl);
+    console.log(`[OmniPDF Embedded Server]: Active on http://127.0.0.1:${SERVER_PORT}`);
   } catch (err) {
-    console.error('Failed to spawn embedded OmniPDF server:', err);
+    console.error('[OmniPDF Embedded Server Error]: Failed to start in-process server:', err);
   }
 }
 
@@ -78,7 +78,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
-      webSecurity: true
+      webSecurity: false // Enables local fetch to embedded http://127.0.0.1:8092 from file:// protocol
     },
     show: false
   });
@@ -88,16 +88,16 @@ function createWindow() {
   });
 
   // Open external links in default browser
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http:') || url.startsWith('https:')) {
-      shell.openExternal(url);
+  mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
+    if (targetUrl.startsWith('http:') || targetUrl.startsWith('https:')) {
+      shell.openExternal(targetUrl);
     }
     return { action: 'deny' };
   });
 
   // Load URL based on environment
-  const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
-  if (isDev && process.env.VITE_DEV_SERVER_URL) {
+  const isDev = !app.isPackaged && process.env.NODE_ENV !== 'development' && process.env.VITE_DEV_SERVER_URL;
+  if (isDev) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
     mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
@@ -110,8 +110,8 @@ function createWindow() {
 
 // App lifecycle
 app.whenReady().then(async () => {
-  startEmbeddedServer();
-  await checkServerReady(SERVER_PORT, 20, 300);
+  await startEmbeddedServer();
+  await checkServerReady(SERVER_PORT, 20, 200);
   createWindow();
 
   app.on('activate', () => {
@@ -122,16 +122,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (serverProcess) {
-    serverProcess.kill('SIGTERM');
-  }
   if (process.platform !== 'darwin') {
     app.quit();
-  }
-});
-
-app.on('before-quit', () => {
-  if (serverProcess) {
-    serverProcess.kill('SIGTERM');
   }
 });

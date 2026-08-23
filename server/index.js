@@ -9,7 +9,7 @@ import apiRouter from './routes/api.js';
 
 const app = express();
 const PORT = process.env.PORT || 8092;
-const STORAGE_DIR = path.resolve('storage/uploads');
+const STORAGE_DIR = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : path.resolve('storage/uploads');
 
 // CORS configuration - strict origin checks
 app.use(cors({

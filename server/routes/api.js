@@ -357,8 +357,8 @@ function encryptPdfBuffer(pdfBuffer, userPassword) {
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
 
-// Setup upload directory in storage
-const STORAGE_DIR = path.resolve('storage/uploads');
+// Setup upload directory in storage (supports process.env.STORAGE_DIR in desktop mode)
+const STORAGE_DIR = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : path.resolve('storage/uploads');
 if (!fs.existsSync(STORAGE_DIR)) {
   fs.mkdirSync(STORAGE_DIR, { recursive: true });
 }

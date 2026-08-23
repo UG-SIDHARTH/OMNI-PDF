@@ -1,4 +1,4 @@
-// Centralized API Client with Session Persistence & Error Handling
+// Centralized API Client with Session Persistence, Error Handling & Desktop/Web Protocol Resolution
 
 function getSessionId() {
   let id = localStorage.getItem('omnipdf_session_id');
@@ -9,9 +9,27 @@ function getSessionId() {
   return id;
 }
 
+export function getApiBaseUrl() {
+  if (typeof window !== 'undefined') {
+    // 1. Explicitly exposed Electron desktop server URL
+    if (window.omniDesktop?.serverUrl) {
+      return window.omniDesktop.serverUrl;
+    }
+    // 2. Desktop file:// protocol or Capacitor webview
+    if (window.location.protocol === 'file:' || window.location.origin === 'null') {
+      return 'http://127.0.0.1:8092';
+    }
+  }
+  return '';
+}
+
 export async function apiFetch(endpoint, options = {}) {
   const sessionId = getSessionId();
-  
+  const baseUrl = getApiBaseUrl();
+  const fullUrl = endpoint.startsWith('http') 
+    ? endpoint 
+    : `${baseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+
   const headers = {
     'x-session-id': sessionId,
     ...(options.headers || {})
@@ -22,7 +40,7 @@ export async function apiFetch(endpoint, options = {}) {
     headers['Content-Type'] = 'application/json';
   }
 
-  const response = await fetch(endpoint, {
+  const response = await fetch(fullUrl, {
     ...options,
     headers,
     credentials: 'include'
