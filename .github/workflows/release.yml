@@ -154,6 +154,8 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          files: final-assets/*
+          files: |
+            release-assets/**/*.exe
+            release-assets/**/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
