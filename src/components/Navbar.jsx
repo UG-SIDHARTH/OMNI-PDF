@@ -314,10 +314,17 @@ export default function Navbar({ onHome, onSelectTool, searchQuery, setSearchQue
                     <button
                       key={tool.id}
                       onClick={() => handleToolClick(tool.id)}
-                      className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-left text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-2"
+                      className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-left text-xs font-semibold text-slate-300 hover:text-white flex items-center justify-between gap-2"
                     >
-                      {getToolIcon(tool.id)}
-                      <span className="truncate">{tool.name}</span>
+                      <div className="flex items-center gap-2 truncate">
+                        {getToolIcon(tool.id)}
+                        <span className="truncate">{tool.name}</span>
+                      </div>
+                      {tool.isWorking === false && (
+                        <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 uppercase tracking-wider flex-shrink-0">
+                          SOON
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>
