@@ -11,9 +11,28 @@ function getSessionId() {
 
 export function isNativeApp() {
   if (typeof window !== 'undefined') {
+    // 1. Electron Desktop
     if (window.omniDesktop?.isDesktop) return true;
-    if (window.Capacitor?.isNativePlatform && window.Capacitor.isNativePlatform()) return true;
-    if (window.location.protocol === 'file:' || window.location.origin === 'null') return true;
+
+    // 2. Capacitor Android / iOS App
+    if (window.Capacitor) {
+      if (typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+        return true;
+      }
+      if (typeof window.Capacitor.getPlatform === 'function' && window.Capacitor.getPlatform() !== 'web') {
+        return true;
+      }
+    }
+
+    // 3. Android webview check (file:, capacitor:, or embedded localhost with Capacitor bridge)
+    if (
+      window.location.protocol === 'file:' || 
+      window.location.protocol === 'capacitor:' || 
+      window.location.origin === 'null' ||
+      (typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent) && window.Capacitor)
+    ) {
+      return true;
+    }
   }
   return false;
 }
