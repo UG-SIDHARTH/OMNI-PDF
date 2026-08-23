@@ -44,7 +44,7 @@ export default function DownloadAppModal({ isOpen, onClose }) {
     }
   };
 
-  const GITHUB_RELEASE_URL = 'https://github.com/UG-SIDHARTH/OMNI-PDF/releases/tag/v0.3';
+  const GITHUB_RELEASE_URL = 'https://github.com/UG-SIDHARTH/OMNI-PDF/releases/latest';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
@@ -64,7 +64,7 @@ export default function DownloadAppModal({ isOpen, onClose }) {
               <h2 className="text-lg font-extrabold text-white flex items-center gap-2">
                 Download OmniPDF Apps
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30 uppercase">
-                  v0.3 Pro
+                  v0.3.4 Pro
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
@@ -292,7 +292,7 @@ export default function DownloadAppModal({ isOpen, onClose }) {
             rel="noopener noreferrer"
             className="flex items-center gap-1 text-rose-400 hover:text-rose-300 font-semibold transition"
           >
-            View GitHub Release v0.3 <ExternalLink className="w-3.5 h-3.5" />
+            View Latest GitHub Releases <ExternalLink className="w-3.5 h-3.5" />
           </a>
         </div>
 
