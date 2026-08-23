@@ -716,8 +716,9 @@ router.post('/pdf/watermark', async (req, res) => {
     if (!record) return res.status(404).json({ error: 'File not found.' });
 
     const buffer = fs.readFileSync(record.metadata.filePath);
-\
-
+    const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
+    const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const pages = pdfDoc.getPages();
     pages.forEach((page) => {
       const { width, height } = page.getSize();
       page.drawText(text, {
