@@ -1,7 +1,7 @@
 {
   "name": "omnipdf",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "OmniPDF Pro Suite - Complete PDF & Media Processing Tools",
   "author": "OmniPDF Team",
   "type": "module",
