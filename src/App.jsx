@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Navbar from './components/Navbar';
 import ToolGrid from './components/ToolGrid';
+import DownloadAppModal from './components/DownloadAppModal';
 import BackgroundRemover from './tools/BackgroundRemover';
 import MergePdf from './tools/MergePdf';
 import CompressPdf from './tools/CompressPdf';
@@ -8,7 +9,7 @@ import ImageToPdf from './tools/ImageToPdf';
 import UniversalToolEngine from './tools/UniversalToolEngine';
 import ComingSoonTool from './tools/ComingSoonTool';
 import { TOOL_CATEGORIES } from './data/toolsData';
-import { ShieldCheck, Heart, Lock, Clock, Zap, RefreshCw } from 'lucide-react';
+import { ShieldCheck, Heart, Lock, Clock, Zap, RefreshCw, Download } from 'lucide-react';
 
 // Error Boundary Component to guarantee no black screen ever occurs
 class ErrorBoundary extends React.Component {
@@ -55,6 +56,7 @@ class ErrorBoundary extends React.Component {
 export default function App() {
   const [activeToolId, setActiveToolId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
 
   // Find active tool metadata object
   const allTools = TOOL_CATEGORIES.flatMap(c => c.tools);
@@ -81,6 +83,7 @@ export default function App() {
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           activeTool={activeToolId}
+          onOpenDownloadModal={() => setIsDownloadModalOpen(true)}
         />
 
         {/* Main Content Workspace */}
@@ -89,6 +92,7 @@ export default function App() {
             <ToolGrid
               searchQuery={searchQuery}
               onSelectTool={handleSelectTool}
+              onOpenDownloadModal={() => setIsDownloadModalOpen(true)}
             />
           ) : activeTool && activeTool.isWorking === false ? (
             <ComingSoonTool
@@ -162,6 +166,10 @@ export default function App() {
             <div className="flex items-center gap-4 text-slate-400">
               <span className="hover:text-white cursor-pointer" onClick={handleGoHome}>All Tools</span>
               <span>•</span>
+              <span className="text-rose-400 font-bold hover:text-rose-300 cursor-pointer flex items-center gap-1" onClick={() => setIsDownloadModalOpen(true)}>
+                <Download className="w-3.5 h-3.5" /> Download App
+              </span>
+              <span>•</span>
               <span className="hover:text-white cursor-pointer" onClick={() => handleSelectTool('background-remover')}>Background Remover</span>
               <span>•</span>
               <span className="hover:text-white cursor-pointer" onClick={() => handleSelectTool('merge-pdf')}>Merge PDF</span>
@@ -170,6 +178,12 @@ export default function App() {
             </div>
           </div>
         </footer>
+
+        {/* Download App Modal */}
+        <DownloadAppModal
+          isOpen={isDownloadModalOpen}
+          onClose={() => setIsDownloadModalOpen(false)}
+        />
       </div>
     </ErrorBoundary>
   );

@@ -7,7 +7,7 @@ import {
   Table, Globe, FileImage, FileType, MonitorPlay, Grid,
   Archive, RotateCw, Hash, Stamp, Crop, Edit3,
   CheckSquare, Unlock, Lock, PenTool, EyeOff, Columns,
-  Sparkles, Languages, FileCode2
+  Sparkles, Languages, FileCode2, Download, Monitor, Smartphone
 } from 'lucide-react';
 
 const ICON_MAP = {
@@ -57,7 +57,7 @@ const CATEGORY_ICON_COLORS = {
   image: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
 };
 
-export default function Navbar({ onHome, onSelectTool, searchQuery, setSearchQuery, activeTool }) {
+export default function Navbar({ onHome, onSelectTool, searchQuery, setSearchQuery, activeTool, onOpenDownloadModal }) {
   const [megaMenuOpen, setMegaMenuOpen] = useState(false);
   const [convertMenuOpen, setConvertMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -120,21 +120,21 @@ export default function Navbar({ onHome, onSelectTool, searchQuery, setSearchQue
           <nav className="hidden lg:flex items-center gap-1 font-bold text-xs uppercase tracking-wider text-slate-300">
             <button
               onClick={() => handleToolClick('merge-pdf')}
-              className="px-3.5 py-2 rounded-lg hover:text-rose-400 hover:bg-slate-900 transition"
+              className="px-3 py-2 rounded-lg hover:text-rose-400 hover:bg-slate-900 transition"
             >
               MERGE PDF
             </button>
 
             <button
               onClick={() => handleToolClick('split-pdf')}
-              className="px-3.5 py-2 rounded-lg hover:text-rose-400 hover:bg-slate-900 transition"
+              className="px-3 py-2 rounded-lg hover:text-rose-400 hover:bg-slate-900 transition"
             >
               SPLIT PDF
             </button>
 
             <button
               onClick={() => handleToolClick('compress-pdf')}
-              className="px-3.5 py-2 rounded-lg hover:text-rose-400 hover:bg-slate-900 transition"
+              className="px-3 py-2 rounded-lg hover:text-rose-400 hover:bg-slate-900 transition"
             >
               COMPRESS PDF
             </button>
@@ -146,7 +146,7 @@ export default function Navbar({ onHome, onSelectTool, searchQuery, setSearchQue
                   setConvertMenuOpen(!convertMenuOpen);
                   setMegaMenuOpen(false);
                 }}
-                className={`px-3.5 py-2 rounded-lg hover:text-rose-400 hover:bg-slate-900 transition flex items-center gap-1 ${
+                className={`px-3 py-2 rounded-lg hover:text-rose-400 hover:bg-slate-900 transition flex items-center gap-1 ${
                   convertMenuOpen ? 'text-rose-400 bg-slate-900' : ''
                 }`}
               >
@@ -204,7 +204,7 @@ export default function Navbar({ onHome, onSelectTool, searchQuery, setSearchQue
                 setMegaMenuOpen(!megaMenuOpen);
                 setConvertMenuOpen(false);
               }}
-              className={`px-3.5 py-2 rounded-lg transition flex items-center gap-1 font-extrabold ${
+              className={`px-3 py-2 rounded-lg transition flex items-center gap-1 font-extrabold ${
                 megaMenuOpen
                   ? 'text-rose-500 bg-rose-500/10 border border-rose-500/30'
                   : 'text-rose-400 hover:text-rose-300 hover:bg-slate-900'
@@ -214,10 +214,19 @@ export default function Navbar({ onHome, onSelectTool, searchQuery, setSearchQue
             </button>
           </nav>
 
-          {/* Right Action Area (No Login / Register buttons) */}
-          <div className="flex items-center gap-3">
+          {/* Right Action Area */}
+          <div className="flex items-center gap-2.5">
+            {/* Download App Button */}
+            <button
+              onClick={onOpenDownloadModal}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-xs font-extrabold shadow-md shadow-rose-600/20 hover:scale-[1.02] transition"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download App</span>
+            </button>
+
             {!activeTool && (
-              <div className="relative hidden sm:block w-48 xl:w-64">
+              <div className="relative hidden sm:block w-40 xl:w-56">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                 <input
                   type="text"
@@ -284,6 +293,18 @@ export default function Navbar({ onHome, onSelectTool, searchQuery, setSearchQue
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div className="lg:hidden bg-slate-900 border-b border-slate-800 p-4 space-y-4 max-h-[80vh] overflow-y-auto">
+          {/* Download App Mobile CTA */}
+          <button
+            onClick={() => {
+              setMobileMenuOpen(false);
+              if (onOpenDownloadModal) onOpenDownloadModal();
+            }}
+            className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-600/25"
+          >
+            <Download className="w-4 h-4" />
+            <span>Download Desktop & Mobile App</span>
+          </button>
+
           <div className="flex gap-2">
             <button
               onClick={() => handleToolClick('merge-pdf')}

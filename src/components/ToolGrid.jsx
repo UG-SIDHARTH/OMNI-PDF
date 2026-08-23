@@ -2,7 +2,7 @@ import React from 'react';
 import { TOOL_CATEGORIES } from '../data/toolsData';
 import * as Icons from 'lucide-react';
 
-export default function ToolGrid({ searchQuery, onSelectTool }) {
+export default function ToolGrid({ searchQuery, onSelectTool, onOpenDownloadModal }) {
 
   // Dynamic Lucide Icon Resolver
   const renderIcon = (iconName, className = "w-6 h-6") => {
@@ -32,7 +32,7 @@ export default function ToolGrid({ searchQuery, onSelectTool }) {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-12">
       
       {/* Hero Banner */}
-      <div className="text-center space-y-4 max-w-3xl mx-auto">
+      <div className="text-center space-y-5 max-w-3xl mx-auto">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold tracking-wide uppercase">
           <Icons.ShieldCheck className="w-4 h-4" /> Privacy-First PDF & Image Suite
         </div>
@@ -44,6 +44,23 @@ export default function ToolGrid({ searchQuery, onSelectTool }) {
         <p className="text-base sm:text-lg text-slate-400">
           Fast, secure, and easy to use. Files are encrypted in transit and automatically deleted 3 hours after upload.
         </p>
+
+        {/* Hero Quick CTA Buttons */}
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <button
+            onClick={() => onSelectTool('merge-pdf')}
+            className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-2 border border-slate-700 transition hover:scale-105"
+          >
+            <Icons.Zap className="w-4 h-4 text-rose-400" /> Start Processing Online
+          </button>
+
+          <button
+            onClick={onOpenDownloadModal}
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-extrabold text-xs flex items-center gap-2 shadow-lg shadow-rose-600/30 transition hover:scale-105"
+          >
+            <Icons.Download className="w-4 h-4" /> Download Desktop & Mobile App
+          </button>
+        </div>
       </div>
 
       {/* Categories Grid */}
@@ -122,6 +139,34 @@ export default function ToolGrid({ searchQuery, onSelectTool }) {
           </section>
         ))
       )}
+
+      {/* Desktop & Mobile App Promo Banner */}
+      <div className="glass-panel p-8 sm:p-10 rounded-3xl relative overflow-hidden bg-gradient-to-r from-slate-900 via-rose-950/20 to-slate-900 border border-rose-500/20 shadow-2xl">
+        <div className="absolute -right-16 -bottom-16 w-64 h-64 bg-rose-600/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-6 text-center lg:text-left">
+          <div className="space-y-2 max-w-xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[11px] font-bold uppercase tracking-wider">
+              <Icons.Zap className="w-3.5 h-3.5" /> 100% Offline Capability
+            </div>
+            <h3 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              Get OmniPDF for Windows & Android
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+              Process unlimited gigabytes of PDFs offline with air-gapped security, zero waiting time, and hardware acceleration on your device.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 flex-shrink-0">
+            <button
+              onClick={onOpenDownloadModal}
+              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-extrabold text-xs flex items-center gap-2.5 shadow-xl shadow-rose-600/30 hover:scale-105 transition"
+            >
+              <Icons.Download className="w-4 h-4" />
+              <span>Download Desktop / Mobile App</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
