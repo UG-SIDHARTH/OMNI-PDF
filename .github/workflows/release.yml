@@ -25,7 +25,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -48,7 +48,6 @@ jobs:
           name: windows-release
           path: |
             release/*.exe
-            release/*.blockmap
           if-no-files-found: warn
 
   # ----------------------------------------------------
@@ -61,17 +60,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      - name: Setup Java JDK 21
+      - name: Setup Java JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
-          java-version: '21'
+          distribution: 'temurin'
+          java-version: '17'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -82,21 +81,21 @@ jobs:
       - name: Build Web Frontend
         run: npm run build
 
-      - name: Sync Capacitor Android
-        run: npx @capacitor/cli sync android || npx @capacitor/cli copy android
+      - name: Copy Web Build into Android Assets
+        run: |
+          mkdir -p android/app/src/main/assets/public
+          cp -r dist/* android/app/src/main/assets/public/
 
       - name: Build Android APK with Gradle
         run: |
           cd android
           chmod +x ./gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --no-daemon
 
-      - name: Rename and Prepare APK
+      - name: Prepare APK Output
         run: |
           mkdir -p output-apk
-          if [ -f android/app/build/outputs/apk/debug/app-debug.apk ]; then
-            cp android/app/build/outputs/apk/debug/app-debug.apk output-apk/OmniPDF-v0.3-debug.apk
-          fi
+          find android/app/build/outputs/apk -name "*.apk" -exec cp {} output-apk/OmniPDF-v0.3-debug.apk \;
 
       - name: Upload Android Artifacts
         uses: actions/upload-artifact@v4
@@ -140,6 +139,12 @@ jobs:
             echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Collect Available Binaries
+        run: |
+          mkdir -p final-assets
+          find release-assets -type f \( -name "*.exe" -o -name "*.apk" \) -exec cp {} final-assets/ \;
+          ls -lh final-assets/
+
       - name: Upload Binaries to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -148,8 +153,6 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          files: |
-            release-assets/windows/*.exe
-            release-assets/android/*.apk
+          files: final-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
