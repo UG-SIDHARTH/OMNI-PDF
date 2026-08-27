@@ -1,14 +1,16 @@
 {
   "name": "omnipdf",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "OmniPDF Pro Suite - Complete PDF & Media Processing Tools",
   "author": "OmniPDF Team",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build:web": "vite build",
+    "build:server": "node scripts/bundle-server.js",
+    "build": "vite build && node scripts/bundle-server.js",
     "preview": "vite preview",
     "server": "node server/index.js",
     "start": "concurrently \"npm run dev\" \"npm run server\"",

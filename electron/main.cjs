@@ -48,12 +48,15 @@ async function startEmbeddedServer() {
   process.env.NODE_ENV = app.isPackaged ? 'production' : 'development';
 
   try {
-    // Resolve server file whether packaged or in development
-    let serverScript = path.join(__dirname, '..', 'server', 'index.js');
-    const unpackedServerScript = path.join(process.resourcesPath || '', 'app.asar.unpacked', 'server', 'index.js');
-    
-    if (app.isPackaged && fs.existsSync(unpackedServerScript)) {
-      serverScript = unpackedServerScript;
+    // Resolve bundled self-contained server file
+    let serverScript = path.join(__dirname, '..', 'dist-server', 'index.mjs');
+    if (!fs.existsSync(serverScript)) {
+      const resourcesServer = path.join(process.resourcesPath || '', 'dist-server', 'index.mjs');
+      if (fs.existsSync(resourcesServer)) {
+        serverScript = resourcesServer;
+      } else {
+        serverScript = path.join(__dirname, '..', 'server', 'index.js');
+      }
     }
 
     const fileUrl = url.pathToFileURL(serverScript).href;

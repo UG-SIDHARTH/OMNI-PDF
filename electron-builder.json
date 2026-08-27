@@ -6,13 +6,11 @@
   },
   "files": [
     "dist/**/*",
+    "dist-server/**/*",
     "electron/**/*",
     "server/**/*",
     "package.json",
     "public/**/*"
-  ],
-  "asarUnpack": [
-    "server/**/*"
   ],
   "win": {
     "target": [
