@@ -15,13 +15,6 @@
   "asarUnpack": [
     "server/**/*"
   ],
-  "extraResources": [
-    {
-      "from": "storage",
-      "to": "storage",
-      "filter": ["**/*"]
-    }
-  ],
   "win": {
     "target": [
       {
