@@ -162,7 +162,7 @@ export default function App() {
         {/* Footer */}
         <footer className="border-t border-slate-800 bg-slate-950 py-8 px-4 text-center text-xs text-slate-500">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p>© 2026 OmniPDF Suite. Privacy First PDF & Image Processing.</p>
+            <p>© 2026 UG_SIDHARTH. All rights reserved. OmniPDF — Privacy First PDF & Image Processing.</p>
             <div className="flex items-center gap-4 text-slate-400">
               <span className="hover:text-white cursor-pointer" onClick={handleGoHome}>All Tools</span>
               <span>•</span>

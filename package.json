@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.4.2",
   "description": "OmniPDF Pro Suite - Complete PDF & Media Processing Tools",
-  "author": "OmniPDF Team",
+  "author": "UG_SIDHARTH",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {

@@ -1,6 +1,7 @@
 {
   "appId": "com.omnipdf.desktop",
   "productName": "OmniPDF",
+  "copyright": "Copyright © 2026 UG_SIDHARTH. All rights reserved.",
   "directories": {
     "output": "release"
   },
