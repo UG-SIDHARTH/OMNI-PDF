@@ -19,6 +19,37 @@ const execFilePromise = promisify(execFile);
 const router = express.Router();
 
 /**
+ * Sanitizes strings for pdf-lib StandardFonts (WinAnsi encoding)
+ * Prevents "WinAnsi cannot encode" crashes on unencodable characters like 0x0081,
+ * smart quotes, special bullets, and out-of-range Unicode.
+ */
+function sanitizeForPdf(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/[\u2022\u2023\u25E6]/g, '*')
+    .replace(/[\u2026]/g, '...')
+    .replace(/[^\x20-\x7E\xA0-\xFF]/g, ' ');
+}
+
+/**
+ * Detects if a string contains characters outside the WinAnsi-encodable range
+ * (i.e. outside \x20-\x7E and \xA0-\xFF, excluding standard replacements like smart quotes/dashes/bullets).
+ */
+function hasUnencodableChars(str) {
+  if (!str) return false;
+  const preCleaned = String(str)
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/[\u2022\u2023\u25E6]/g, '*')
+    .replace(/[\u2026]/g, '...');
+  return /[^\x20-\x7E\xA0-\xFF\r\n\t]/.test(preCleaned);
+}
+
+/**
  * PDF Text & Stream Extractor for AI Analysis
  */
 function extractPdfText(buffer) {
@@ -92,97 +123,8 @@ function extractPdfText(buffer) {
 }
 
 /**
- * Real 128-Bit AES Stream Encryption - Encrypts PDF Streams to force Chrome/Acrobat Password Prompt
- */
-function encryptPdfAES128(pdfBuffer, userPassword) {
-  const padBytes = Buffer.from([
-    0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41, 0x64, 0x00, 0x4E, 0x56, 0xFF, 0xFA, 0x01, 0x08,
-    0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80, 0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A
-  ]);
-
-  const userBuf = Buffer.from(userPassword || 'protected123', 'utf8');
-  let paddedUser = Buffer.alloc(32);
-  if (userBuf.length >= 32) userBuf.copy(paddedUser, 0, 0, 32);
-  else {
-    userBuf.copy(paddedUser, 0);
-    padBytes.copy(paddedUser, userBuf.length, 0, 32 - userBuf.length);
-  }
-
-  const docId = crypto.randomBytes(16);
-  const docIdHex = docId.toString('hex').toUpperCase();
-
-  const pVal = -1028;
-  const pBuf = Buffer.alloc(4);
-  pBuf.writeInt32LE(pVal, 0);
-
-  // Derive Owner & User Key Hashes
-  const md5O = crypto.createHash('md5').update(paddedUser).digest();
-  let oVal = Buffer.alloc(32);
-  md5O.copy(oVal, 0);
-  padBytes.copy(oVal, 16, 0, 16);
-
-  const md5K = crypto.createHash('md5');
-  md5K.update(paddedUser);
-  md5K.update(oVal);
-  md5K.update(pBuf);
-  md5K.update(docId);
-  const keyK = md5K.digest();
-
-  const md5U = crypto.createHash('md5').update(padBytes).update(docId).digest();
-  let uVal = Buffer.alloc(32);
-  md5U.copy(uVal, 0);
-  padBytes.copy(uVal, 16, 0, 16);
-
-  const oHex = oVal.toString('hex').toUpperCase();
-  const uHex = uVal.toString('hex').toUpperCase();
-
-  const str = pdfBuffer.toString('binary');
-  const trailerIdx = str.lastIndexOf('trailer');
-  if (trailerIdx === -1) return pdfBuffer;
-
-  const encryptObjNum = 99999;
-  const encryptObj = `\n${encryptObjNum} 0 obj\n<<\n  /Filter /Standard\n  /V 4\n  /R 4\n  /Length 128\n  /P ${pVal}\n  /StmF /StdCF\n  /StrF /StdCF\n  /CF << /StdCF << /CFM /AESV2 /AuthCode false /Length 128 >> >>\n  /O <${oHex}>\n  /U <${uHex}>\n>>\nendobj\n`;
-
-  // Encrypt streams inside objects using AES-128-CBC
-  const updatedStr = str.replace(/(\d+)\s+(\d+)\s+obj([\s\S]*?)endobj/g, (match, objNumStr, genNumStr, body) => {
-    const objNum = parseInt(objNumStr, 10);
-    const genNum = parseInt(genNumStr, 10);
-
-    if (objNum === encryptObjNum) return match;
-
-    const objKeyBuf = Buffer.alloc(9);
-    objKeyBuf.writeUInt32LE(objNum, 0);
-    objKeyBuf.writeUInt16LE(genNum, 4);
-    objKeyBuf[6] = 0x73; // 's'
-    objKeyBuf[7] = 0x41; // 'A'
-    objKeyBuf[8] = 0x6C; // 'l'
-
-    const objHash = crypto.createHash('md5').update(keyK).update(objKeyBuf).digest();
-    const objKey = objHash.slice(0, 16);
-
-    const encryptedBody = body.replace(/(stream\r?\n)([\s\S]*?)(\r?\nendstream)/g, (sMatch, streamHead, streamData, streamTail) => {
-      const dataBuf = Buffer.from(streamData, 'binary');
-      const iv = crypto.randomBytes(16);
-      const cipher = crypto.createCipheriv('aes-128-cbc', objKey, iv);
-      const encData = Buffer.concat([iv, cipher.update(dataBuf), cipher.final()]);
-      return streamHead + encData.toString('binary') + streamTail;
-    });
-
-    return `${objNum} ${genNum} obj${encryptedBody}endobj`;
-  });
-
-  const newTrailerIdx = updatedStr.lastIndexOf('trailer');
-  const beforeTrailer = updatedStr.slice(0, newTrailerIdx);
-  const afterTrailer = updatedStr.slice(newTrailerIdx);
-
-  const newAfterTrailer = afterTrailer.replace('trailer', `trailer\n<<\n  /Encrypt ${encryptObjNum} 0 R\n  /ID [<${docIdHex}> <${docIdHex}>]`);
-
-  const finalStr = beforeTrailer + encryptObj + newAfterTrailer;
-  return Buffer.from(finalStr, 'binary');
-}
-
-/**
- * Executes qpdf or fallback AES-128 encryption to lock PDF with user password
+ * Executes qpdf to lock PDF with user password per ISO 32000-1 specification.
+ * Explicitly requires qpdf to guarantee cryptographic document security and prevent corrupted or falsely-protected files.
  */
 async function protectPdfFile(inputPath, userPassword, outputPath) {
   try {
@@ -195,25 +137,22 @@ async function protectPdfFile(inputPath, userPassword, outputPath) {
       inputPath,
       outputPath
     ]);
+    if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
+      throw new Error('qpdf output file was empty');
+    }
     return true;
   } catch (err) {
-    const pdfBuffer = fs.readFileSync(inputPath);
-    const encBuffer = encryptPdfAES128(pdfBuffer, userPassword);
-    fs.writeFileSync(outputPath, encBuffer);
-    return true;
+    if (err.code === 'ENOENT' || err.message?.includes('not recognized') || err.message?.includes('Command failed: qpdf')) {
+      throw new Error("PDF password encryption requires the 'qpdf' CLI utility to be installed on the system (e.g. 'winget install qpdf' on Windows or 'apt install qpdf' on Linux) for ISO 32000-1 certified 256-bit AES encryption.");
+    }
+    throw new Error('Failed to protect PDF: ' + err.message);
   }
 }
 
 /**
- * Executes qpdf (preferred) or fallback decryption to remove PDF password security.
- * IMPORTANT: The fallback does NOT use ignoreEncryption:true — that would bypass
- * password verification entirely and allow anyone to unlock without a password.
- * Instead, the fallback validates that the supplied password was used to encrypt
- * via our own encryptPdfAES128 (which embeds the password hash in the /Encrypt dict).
- * If no password is given, or it's wrong, an error is thrown.
+ * Executes qpdf to remove PDF password security per ISO 32000-1 specification.
  */
 async function unlockPdfFile(inputPath, password, outputPath) {
-  // --- Preferred path: qpdf (spec-compliant, validates password cryptographically) ---
   try {
     const args = password
       ? [`--password=${password}`, '--decrypt', inputPath, outputPath]
@@ -221,7 +160,6 @@ async function unlockPdfFile(inputPath, password, outputPath) {
     await execFilePromise('qpdf', args);
     return true;
   } catch (qpdfErr) {
-    // qpdf not installed or wrong password. Distinguish:
     const isWrongPassword = qpdfErr.message && (
       qpdfErr.message.includes('invalid password') ||
       qpdfErr.message.includes('password incorrect') ||
@@ -231,64 +169,12 @@ async function unlockPdfFile(inputPath, password, outputPath) {
     if (isWrongPassword) {
       throw new Error('Incorrect password. Please provide the correct password to unlock this PDF.');
     }
-    // qpdf not found — fall through to native fallback.
+    if (qpdfErr.code === 'ENOENT' || qpdfErr.message?.includes('not recognized') || qpdfErr.message?.includes('Command failed: qpdf')) {
+      throw new Error("PDF password decryption requires the 'qpdf' CLI utility to be installed on the system (e.g. 'winget install qpdf' on Windows or 'apt install qpdf' on Linux) for cryptographic password verification.");
+    }
+    throw new Error('Failed to unlock PDF: ' + qpdfErr.message);
   }
-
-  // --- Fallback path: our own encryptPdfAES128-aware decryption ---
-  // This ONLY works on files encrypted by our own protectPdfFile fallback.
-  // We verify the /U hash matches what we'd compute for the supplied password.
-  if (!password) {
-    throw new Error('A password is required to unlock this PDF. No password was provided.');
-  }
-
-  const pdfBuffer = fs.readFileSync(inputPath);
-  const pdfStr = pdfBuffer.toString('binary');
-
-  // Extract /U and /O values from the /Encrypt dictionary written by encryptPdfAES128
-  const uMatch = pdfStr.match(/\/U\s*<([0-9A-Fa-f]{64})>/);
-  const oMatch = pdfStr.match(/\/O\s*<([0-9A-Fa-f]{64})>/);
-  const idMatch = pdfStr.match(/\/ID\s*\[<([0-9A-Fa-f]{32})>/);
-
-  if (!uMatch || !oMatch || !idMatch) {
-    throw new Error('This PDF does not appear to have been encrypted by this application and cannot be unlocked without qpdf. Please install qpdf for full encryption support.');
-  }
-
-  // Validate password: re-derive U value from supplied password and compare
-  const padBytes = Buffer.from([
-    0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41, 0x64, 0x00, 0x4E, 0x56, 0xFF, 0xFA, 0x01, 0x08,
-    0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80, 0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A
-  ]);
-  const passBuf = Buffer.from(password, 'utf8');
-  let paddedPass = Buffer.alloc(32);
-  if (passBuf.length >= 32) passBuf.copy(paddedPass, 0, 0, 32);
-  else { passBuf.copy(paddedPass, 0); padBytes.copy(paddedPass, passBuf.length, 0, 32 - passBuf.length); }
-
-  const docId = Buffer.from(idMatch[1], 'hex');
-  const pVal = -1028;
-  const pBuf = Buffer.alloc(4);
-  pBuf.writeInt32LE(pVal, 0);
-
-  const oVal = Buffer.from(oMatch[1], 'hex');
-  const derivedK = crypto.createHash('md5').update(paddedPass).update(oVal).update(pBuf).update(docId).digest();
-  const derivedU = crypto.createHash('md5').update(padBytes).update(docId).digest();
-  let expectedU = Buffer.alloc(32);
-  derivedU.copy(expectedU, 0);
-  padBytes.copy(expectedU, 16, 0, 16);
-
-  const storedU = Buffer.from(uMatch[1], 'hex');
-  // Compare first 16 bytes (the meaningful part of /U in RC4/AES standard)
-  if (!storedU.slice(0, 16).equals(expectedU.slice(0, 16))) {
-    throw new Error('Incorrect password. The supplied password does not match the one used to protect this PDF.');
-  }
-
-  // Password validated — strip the /Encrypt dictionary and restore the file
-  const withoutEncrypt = pdfStr
-    .replace(/\n\d+ 0 obj\n<<\n\s*\/Filter \/Standard[\s\S]*?endobj\n/, '')
-    .replace(/\/Encrypt \d+ 0 R\s*/, '');
-  fs.writeFileSync(outputPath, Buffer.from(withoutEncrypt, 'binary'));
-  return true;
 }
-
 
 /**
  * Standard PDF Encryption Generator - Forces PDF Readers & Browsers to prompt for password
@@ -489,7 +375,7 @@ function saveUserFile(sessionId, buffer, originalName, mimeType) {
 
 /**
  * POST /api/upload
- * Handles single or multiple file uploads up to 50MB
+ * Handles single or multiple file uploads up to 50MB with strict type & safety validation
  */
 router.post('/upload', upload.array('files', 10), (req, res) => {
   try {
@@ -497,13 +383,43 @@ router.post('/upload', upload.array('files', 10), (req, res) => {
       return res.status(400).json({ error: 'No files selected for upload.' });
     }
 
+    const ALLOWED_EXTENSIONS = new Set([
+      '.pdf', '.docx', '.doc', '.pptx', '.ppt', '.xlsx', '.xls',
+      '.jpg', '.jpeg', '.png', '.webp', '.html', '.htm', '.txt', '.csv', '.md'
+    ]);
+
+    const BLOCKED_EXTENSIONS = new Set([
+      '.exe', '.dll', '.bat', '.cmd', '.sh', '.vbs', '.js', '.mjs',
+      '.scr', '.com', '.ps1', '.msi', '.jar', '.apk', '.bin', '.elf', '.iso', '.sys'
+    ]);
+
     const uploadedRecords = [];
 
     for (const file of req.files) {
       const buffer = fs.readFileSync(file.path);
-      fs.unlinkSync(file.path);
+      if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
-      // Magic byte checks
+      if (buffer.length === 0) {
+        return res.status(400).json({ error: `File "${file.originalname}" is empty (0 bytes).` });
+      }
+
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (BLOCKED_EXTENSIONS.has(ext)) {
+        return res.status(400).json({ error: `Executable or script files like "${ext}" are blocked for security.` });
+      }
+
+      // Check binary executable magic bytes
+      const isExe = (buffer.length >= 2 && buffer[0] === 0x4D && buffer[1] === 0x5A) || // MZ
+                    (buffer.length >= 4 && buffer[0] === 0x7F && buffer[1] === 0x45 && buffer[2] === 0x4C && buffer[3] === 0x46); // ELF
+      if (isExe) {
+        return res.status(400).json({ error: `File "${file.originalname}" appears to be a binary executable and cannot be processed.` });
+      }
+
+      if (ext && !ALLOWED_EXTENSIONS.has(ext)) {
+        return res.status(400).json({ error: `File format "${ext}" is not supported. Please upload PDF, Office documents, or image files.` });
+      }
+
+      // Magic byte checks for standard documents
       const isPdf = buffer.length >= 5 && buffer.slice(0, 5).toString('utf8') === '%PDF-';
       const isPng = buffer.length >= 4 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
       const isJpg = buffer.length >= 3 && buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
@@ -1415,6 +1331,11 @@ router.post('/pdf/word-to-pdf', async (req, res) => {
       if (parsed.value) extractedText = parsed.value;
     } catch (e) {}
 
+    const warnings = [];
+    if (hasUnencodableChars(extractedText)) {
+      warnings.push('This document contains non-Latin characters (e.g. Cyrillic, CJK, Arabic, or other non-Latin scripts) that cannot be rendered by the standard PDF engine. Unencodable characters were omitted from the text layer.');
+    }
+
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595.28, 841.89]);
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -1426,7 +1347,7 @@ router.post('/pdf/word-to-pdf', async (req, res) => {
 
     lines.forEach((line) => {
       if (y > 50 && line.trim()) {
-        page.drawText(line.trim().slice(0, 80), { x: 50, y, size: 11, font });
+        page.drawText(sanitizeForPdf(line.trim().slice(0, 80)), { x: 50, y, size: 11, font });
         y -= 20;
       }
     });
@@ -1439,10 +1360,87 @@ router.post('/pdf/word-to-pdf', async (req, res) => {
       'application/pdf'
     );
 
-    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
+    res.json({
+      success: true,
+      fileId: meta.fileId,
+      originalName: meta.originalName,
+      size: meta.size,
+      warnings: warnings.length > 0 ? warnings : undefined,
+      expiresAt: meta.expiresAt
+    });
   } catch (err) {
     console.error('Word to PDF Error:', err);
     res.status(500).json({ error: 'Failed to convert Word to PDF: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/pdf/powerpoint-to-pdf
+ */
+router.post('/pdf/powerpoint-to-pdf', async (req, res) => {
+  try {
+    const { fileId } = req.body;
+    const record = getValidFileMetadata(req.sessionId, fileId);
+    if (!record) return res.status(404).json({ error: 'File not found.' });
+
+    const buffer = fs.readFileSync(record.metadata.filePath);
+    let extractedText = '';
+    try {
+      const str = buffer.toString('utf8');
+      const textMatches = str.match(/<a:t>([^<]+)<\/a:t>/g) || [];
+      extractedText = textMatches.map(m => m.replace(/<\/?a:t>/g, '').trim()).filter(Boolean).join('\n');
+    } catch (e) {}
+
+    if (!extractedText) extractedText = 'Converted PowerPoint Presentation Slides';
+
+    const warnings = [];
+    if (hasUnencodableChars(extractedText)) {
+      warnings.push('This document contains non-Latin characters (e.g. Cyrillic, CJK, Arabic, or other non-Latin scripts) that cannot be rendered by the standard PDF engine. Unencodable characters were omitted from the text layer.');
+    }
+
+    const pdfDoc = await PDFDocument.create();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    const lines = extractedText.split(/\r?\n/).filter(l => l.trim().length > 0);
+    const slides = [];
+    const chunkSize = 6;
+    for (let i = 0; i < Math.max(1, lines.length); i += chunkSize) {
+      slides.push(lines.slice(i, i + chunkSize));
+    }
+
+    slides.forEach((chunk, sIdx) => {
+      const page = pdfDoc.addPage([841.89, 595.28]);
+      page.drawText(sanitizeForPdf(`Slide ${sIdx + 1}`), { x: 50, y: 540, size: 20, font: fontBold, color: rgb(0.88, 0.11, 0.28) });
+      
+      let y = 480;
+      chunk.forEach((line) => {
+        if (y > 60) {
+          page.drawText(sanitizeForPdf(`• ${line.slice(0, 100)}`), { x: 60, y, size: 14, font, color: rgb(0.2, 0.2, 0.3) });
+          y -= 30;
+        }
+      });
+    });
+
+    const pdfBytes = await pdfDoc.save();
+    const meta = saveUserFile(
+      req.sessionId,
+      Buffer.from(pdfBytes),
+      `${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.pdf`,
+      'application/pdf'
+    );
+
+    res.json({
+      success: true,
+      fileId: meta.fileId,
+      originalName: meta.originalName,
+      size: meta.size,
+      warnings: warnings.length > 0 ? warnings : undefined,
+      expiresAt: meta.expiresAt
+    });
+  } catch (err) {
+    console.error('PowerPoint to PDF Error:', err);
+    res.status(500).json({ error: 'Failed to convert PowerPoint to PDF: ' + err.message });
   }
 });
 
@@ -1465,6 +1463,20 @@ router.post('/pdf/excel-to-pdf', async (req, res) => {
       }
     } catch (e) {}
 
+    let hasUnencodable = false;
+    rowsData.forEach(row => {
+      if (Array.isArray(row)) {
+        row.forEach(cell => {
+          if (hasUnencodableChars(cell)) hasUnencodable = true;
+        });
+      }
+    });
+
+    const warnings = [];
+    if (hasUnencodable) {
+      warnings.push('This document contains non-Latin characters (e.g. Cyrillic, CJK, Arabic, or other non-Latin scripts) that cannot be rendered by the standard PDF engine. Unencodable characters were omitted from the text layer.');
+    }
+
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595.28, 841.89]);
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -1475,8 +1487,8 @@ router.post('/pdf/excel-to-pdf', async (req, res) => {
 
     rowsData.slice(0, 35).forEach((row) => {
       if (y > 50 && Array.isArray(row)) {
-        const rowStr = row.map(cell => String(cell || '')).join('  |  ').slice(0, 85);
-        page.drawText(rowStr, { x: 50, y, size: 10, font });
+        const rowStr = row.map(cell => sanitizeForPdf(String(cell ?? ''))).join('  |  ').slice(0, 85);
+        page.drawText(sanitizeForPdf(rowStr), { x: 50, y, size: 10, font });
         y -= 18;
       }
     });
@@ -1489,7 +1501,14 @@ router.post('/pdf/excel-to-pdf', async (req, res) => {
       'application/pdf'
     );
 
-    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
+    res.json({
+      success: true,
+      fileId: meta.fileId,
+      originalName: meta.originalName,
+      size: meta.size,
+      warnings: warnings.length > 0 ? warnings : undefined,
+      expiresAt: meta.expiresAt
+    });
   } catch (err) {
     console.error('Excel to PDF Error:', err);
     res.status(500).json({ error: 'Failed to convert Excel to PDF: ' + err.message });
@@ -1746,12 +1765,25 @@ router.post('/pdf/html-to-pdf', async (req, res) => {
 
     page.drawText('HTML Rendered PDF Document', { x: 50, y: 790, size: 20, font: fontBold, color: rgb(0.1, 0.3, 0.6) });
     const cleanText = htmlCode.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
-    page.drawText(cleanText.substring(0, 500), { x: 50, y: 750, size: 11, font: fontRegular });
+    
+    const warnings = [];
+    if (hasUnencodableChars(cleanText)) {
+      warnings.push('This document contains non-Latin characters (e.g. Cyrillic, CJK, Arabic, or other non-Latin scripts) that cannot be rendered by the standard PDF engine. Unencodable characters were omitted from the text layer.');
+    }
+
+    page.drawText(sanitizeForPdf(cleanText.substring(0, 500)), { x: 50, y: 750, size: 11, font: fontRegular });
 
     const bytes = await pdfDoc.save();
     const meta = saveUserFile(req.sessionId, Buffer.from(bytes), `HTML_Export_${Date.now()}.pdf`, 'application/pdf');
 
-    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt });
+    res.json({
+      success: true,
+      fileId: meta.fileId,
+      originalName: meta.originalName,
+      size: meta.size,
+      warnings: warnings.length > 0 ? warnings : undefined,
+      expiresAt: meta.expiresAt
+    });
   } catch (err) {
     console.error('HTML to PDF Error:', err);
     res.status(500).json({ error: 'Failed to convert HTML to PDF: ' + err.message });

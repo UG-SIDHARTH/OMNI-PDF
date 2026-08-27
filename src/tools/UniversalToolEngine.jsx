@@ -82,6 +82,11 @@ export default function UniversalToolEngine({ tool, onBack }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [pageNumbersPosition, setPageNumbersPosition] = useState('bottom-center');
+  const [cropPercent, setCropPercent] = useState(10);
+  const [signatureText, setSignatureText] = useState('Authorized Signature');
+  const [pageOrdersInput, setPageOrdersInput] = useState('');
+  const [htmlContent, setHtmlContent] = useState('<h1>OmniPDF Document</h1><p>Converted from HTML format</p>');
 
   // AI & Local Extractor Controls
   const [preserveHeadings, setPreserveHeadings] = useState(true);
@@ -211,6 +216,61 @@ export default function UniversalToolEngine({ tool, onBack }) {
           apiEndpoint = '/api/pdf/extract-pages';
           payload.pageRange = pageRange;
           break;
+        case 'organize-pdf':
+          apiEndpoint = '/api/pdf/organize';
+          if (pageOrdersInput && pageOrdersInput.trim()) {
+            payload.pageOrders = pageOrdersInput.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n));
+          } else {
+            payload.pageOrders = [];
+          }
+          break;
+        case 'ocr-pdf':
+          apiEndpoint = '/api/pdf/ocr';
+          break;
+        case 'word-to-pdf':
+          apiEndpoint = '/api/pdf/word-to-pdf';
+          break;
+        case 'excel-to-pdf':
+          apiEndpoint = '/api/pdf/excel-to-pdf';
+          break;
+        case 'powerpoint-to-pdf':
+          apiEndpoint = '/api/pdf/powerpoint-to-pdf';
+          break;
+        case 'html-to-pdf':
+          apiEndpoint = '/api/pdf/html-to-pdf';
+          payload.htmlCode = htmlContent || '<h1>OmniPDF Rendered Document</h1><p>Converted from HTML</p>';
+          break;
+        case 'pdf-to-word':
+          apiEndpoint = '/api/pdf/pdf-to-word';
+          break;
+        case 'pdf-to-excel':
+          apiEndpoint = '/api/pdf/pdf-to-excel';
+          break;
+        case 'pdf-to-powerpoint':
+          apiEndpoint = '/api/pdf/pdf-to-ppt';
+          break;
+        case 'pdf-to-pdfa':
+          apiEndpoint = '/api/pdf/pdf-to-pdfa';
+          break;
+        case 'pdf-to-jpg':
+          apiEndpoint = '/api/pdf/pdf-to-jpg';
+          break;
+        case 'add-page-numbers':
+          apiEndpoint = '/api/pdf/add-page-numbers';
+          payload.position = pageNumbersPosition;
+          break;
+        case 'crop-pdf':
+          apiEndpoint = '/api/pdf/crop';
+          payload.cropPercent = cropPercent;
+          payload.marginPercent = cropPercent;
+          break;
+        case 'sign-pdf':
+          apiEndpoint = '/api/pdf/sign';
+          payload.signatureText = signatureText;
+          break;
+        case 'compare-pdf':
+          apiEndpoint = '/api/pdf/compare';
+          break;
         case 'pdf-to-markdown':
           apiEndpoint = '/api/pdf/pdf-to-markdown';
           payload.preserveHeadings = preserveHeadings;
@@ -230,6 +290,14 @@ export default function UniversalToolEngine({ tool, onBack }) {
           apiEndpoint = '/api/pdf/redact';
           payload.keywords = redactKeywords;
           break;
+        case 'scan-to-pdf':
+          apiEndpoint = '/api/pdf/image-to-pdf';
+          break;
+        case 'repair-pdf':
+        case 'edit-pdf':
+        case 'pdf-forms':
+          apiEndpoint = '/api/pdf/repair';
+          break;
         default:
           apiEndpoint = '/api/pdf/repair';
       }
@@ -246,7 +314,7 @@ export default function UniversalToolEngine({ tool, onBack }) {
 
       const procJson = await processRes.json();
       let infoText = `${toolName} processed successfully.`;
-      let previewText = procJson.markdownText || procJson.summaryText || procJson.translatedText || null;
+      let previewText = procJson.previewText || procJson.markdownText || procJson.summaryText || procJson.translatedText || null;
 
       setResult({
         fileId: procJson.fileId,
@@ -254,7 +322,8 @@ export default function UniversalToolEngine({ tool, onBack }) {
         filename: procJson.originalName,
         infoText,
         expiresAt: procJson.expiresAt || Date.now() + 3 * 60 * 60 * 1000,
-        previewText
+        previewText,
+        warnings: procJson.warnings
       });
 
       setIsProcessing(false);
@@ -721,6 +790,115 @@ export default function UniversalToolEngine({ tool, onBack }) {
                   </div>
                 )}
 
+                {/* Controls for Organize PDF */}
+                {toolId === 'organize-pdf' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-slate-300 tracking-wider uppercase block mb-1.5">
+                        Page Order Sequence
+                      </label>
+                      <input
+                        type="text"
+                        value={pageOrdersInput}
+                        onChange={(e) => setPageOrdersInput(e.target.value)}
+                        placeholder="e.g. 3, 1, 2, 4 (or leave blank to keep original)"
+                        className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none focus:border-rose-500 font-medium"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Enter the sequence of page numbers (1-indexed) to rearrange pages in the document.
+                    </p>
+                  </div>
+                )}
+
+                {/* Controls for Add Page Numbers */}
+                {toolId === 'add-page-numbers' && (
+                  <div className="space-y-4">
+                    <label className="text-xs font-bold text-slate-300 tracking-wider uppercase block">
+                      Number Position
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <SelectableCard
+                        isSelected={pageNumbersPosition === 'bottom-center'}
+                        onClick={() => setPageNumbersPosition('bottom-center')}
+                        title="Bottom"
+                        subtitle="Center"
+                      />
+                      <SelectableCard
+                        isSelected={pageNumbersPosition === 'bottom-right'}
+                        onClick={() => setPageNumbersPosition('bottom-right')}
+                        title="Bottom"
+                        subtitle="Right"
+                      />
+                      <SelectableCard
+                        isSelected={pageNumbersPosition === 'top-center'}
+                        onClick={() => setPageNumbersPosition('top-center')}
+                        title="Top"
+                        subtitle="Center"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Controls for Crop PDF */}
+                {toolId === 'crop-pdf' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-slate-300 tracking-wider uppercase block mb-1.5">
+                        Crop Margin: {cropPercent}%
+                      </label>
+                      <input
+                        type="range"
+                        min="2"
+                        max="30"
+                        step="1"
+                        value={cropPercent}
+                        onChange={(e) => setCropPercent(parseInt(e.target.value, 10))}
+                        className="w-full accent-rose-500 cursor-pointer"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Crops outer margin borders from all pages uniformly.
+                    </p>
+                  </div>
+                )}
+
+                {/* Controls for Sign PDF */}
+                {toolId === 'sign-pdf' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-slate-300 tracking-wider uppercase block mb-1.5">
+                        Signer Name / Text
+                      </label>
+                      <input
+                        type="text"
+                        value={signatureText}
+                        onChange={(e) => setSignatureText(e.target.value)}
+                        placeholder="e.g. John Doe"
+                        className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none focus:border-rose-500 font-medium"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Controls for HTML to PDF */}
+                {toolId === 'html-to-pdf' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-slate-300 tracking-wider uppercase block mb-1.5">
+                        HTML Code Input
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={htmlContent}
+                        onChange={(e) => setHtmlContent(e.target.value)}
+                        placeholder="<h1>Title</h1><p>Content...</p>"
+                        className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-white text-xs focus:outline-none focus:border-rose-500 font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {errorMsg && (
                   <div className="p-3.5 rounded-2xl bg-rose-950/90 border border-rose-800 text-rose-200 text-xs flex items-center gap-2.5">
                     <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
@@ -748,6 +926,18 @@ export default function UniversalToolEngine({ tool, onBack }) {
             <h2 className="text-2xl font-extrabold text-white mb-2">{toolName} Completed!</h2>
             <p className="text-sm text-slate-400">{result.infoText}</p>
           </div>
+
+          {result.warnings && result.warnings.length > 0 && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs text-left flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-bold text-amber-300">Rendering Notice</p>
+                {result.warnings.map((w, idx) => (
+                  <p key={idx} className="text-amber-200/90 leading-relaxed">{w}</p>
+                ))}
+              </div>
+            </div>
+          )}
 
           {result.previewText && (
             <div className="text-left space-y-2">

@@ -24,7 +24,12 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Attach anonymous session ID middleware
 app.use(ensureSession);
 
-// Rate limiting - 30 requests per minute per IP for processing endpoints
+// Health check endpoint (exempt from rate limiter)
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Rate limiting - 60 requests per minute per IP for processing endpoints
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 60,
@@ -34,11 +39,6 @@ const apiLimiter = rateLimit({
 });
 
 app.use('/api', apiLimiter, apiRouter);
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
 
 // Serve frontend static files in production
 const distDir = path.resolve('dist');

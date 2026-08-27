@@ -1,0 +1,222 @@
+{
+  "test1": [
+    {
+      "tool": "Organize PDF",
+      "endpoint": "/api/pdf/organize",
+      "pass": true,
+      "details": "Output has 4 pages. Page order verified: 3, 1, 4, 2. Text order: \"PAGE_ID_3 -- 1 of 4 -- PAGE_ID_1 -- 2 of 4 -- PAGE_ID_4 -- 3 of 4 -- PAGE_ID_2 -- 4 of 4 --\""
+    },
+    {
+      "tool": "OCR PDF",
+      "endpoint": "/api/pdf/ocr",
+      "pass": true,
+      "details": "Output text file size: 93 bytes. Extracted text contains source OCR layer."
+    },
+    {
+      "tool": "Word to PDF",
+      "endpoint": "/api/pdf/word-to-pdf",
+      "pass": true,
+      "details": "Rendered 1-page PDF. Extracted text: \"Word to PDF Export Executive Quarterly Revenue Summary Total Net Income: $4,500,000 -- 1 of 1 --\""
+    },
+    {
+      "tool": "Excel to PDF",
+      "endpoint": "/api/pdf/excel-to-pdf",
+      "pass": true,
+      "details": "Tabular PDF grid rendered with aligned columns. Text: \"Excel Spreadsheet PDF Export Department | Q1 Revenue | Q2 Revenue | Growth Engineering | $120,000 | $145,000 | +20.8% Marketing | $85,000 | $92,000 | +8.2% -- 1 of 1 --\""
+    },
+    {
+      "tool": "PowerPoint to PDF",
+      "endpoint": "/api/pdf/powerpoint-to-pdf",
+      "pass": true,
+      "details": "Generated 1 landscape slide page(s) (841.9x595.3 pt)."
+    },
+    {
+      "tool": "HTML to PDF",
+      "endpoint": "/api/pdf/html-to-pdf",
+      "pass": true,
+      "details": "Rendered HTML structure into PDF. Text: \"HTML Rendered PDF Document Architecture Overview OmniPDF operates 100% offline with zero cloud telemetry. -- 1 of 1 --\""
+    },
+    {
+      "tool": "PDF to Word",
+      "endpoint": "/api/pdf/pdf-to-word",
+      "pass": true,
+      "details": "Generated valid OpenXML .docx (8630 bytes). Extracted text: \"Heading: System Architecture Paragraph 1: Zero-knowledge cryptographic storage Paragraph 2: Local Node engine. -- 1 of 1 --\""
+    },
+    {
+      "tool": "PDF to Excel",
+      "endpoint": "/api/pdf/pdf-to-excel",
+      "pass": true,
+      "details": "Generated valid .xlsx with 5 row(s). Sample cell: \"[\"Line #\",\"Column 1\",\"Column 2\",\"Column 3\",\"Column 4\"]\""
+    },
+    {
+      "tool": "PDF to PowerPoint",
+      "endpoint": "/api/pdf/pdf-to-ppt",
+      "pass": true,
+      "details": "Generated valid OpenXML Presentation (.pptx) bundle (46143 bytes)."
+    },
+    {
+      "tool": "PDF to PDF/A",
+      "endpoint": "/api/pdf/pdf-to-pdfa",
+      "pass": false,
+      "details": "Title metadata: \"Compliance.pdf (PDF/A-1b Archival Format)\", Producer: \"pdf-lib (https://github.com/Hopding/pdf-lib)\". Valid standard PDF/A structure."
+    },
+    {
+      "tool": "PDF to JPG",
+      "endpoint": "/api/pdf/pdf-to-jpg",
+      "pass": true,
+      "details": "Exported page image artifact (886 bytes, Content-Type: image/jpeg)."
+    },
+    {
+      "tool": "Add Page Numbers",
+      "endpoint": "/api/pdf/add-page-numbers",
+      "pass": true,
+      "details": "Page stamp verified on all pages: found \"Page 1 of 2 & Page 2 of 2\"."
+    },
+    {
+      "tool": "Crop PDF",
+      "endpoint": "/api/pdf/crop",
+      "pass": true,
+      "details": "Crop box dimensions set to [x:60, y:80, w:480, h:640] (10% uniform margin trimmed)."
+    },
+    {
+      "tool": "Sign PDF",
+      "endpoint": "/api/pdf/sign",
+      "pass": true,
+      "details": "Signature badge and text (\"Dr. Johnathan Doe, PhD\") stamped on final page."
+    },
+    {
+      "tool": "Compare PDF",
+      "endpoint": "/api/pdf/compare",
+      "pass": true,
+      "details": "Audit difference overlay stamp (\"[COMPARISON AUDIT OVERLAY - PAGE 1]\") rendered over document."
+    }
+  ],
+  "test2": [
+    {
+      "script": "Latin Accents",
+      "input": "Café français, Señor Niño, Über Größe, São Paulo",
+      "excelOutput": "Excel Spreadsheet PDF Export Column A | Column B Latin Accents | Café français, Señor Niño, Über Größe, São Paulo -- 1 of 1 --",
+      "wordOutput": "Word to PDF Export Café français, Señor Niño, Über Größe, São Paulo -- 1 of 1 --",
+      "htmlOutput": "HTML Rendered PDF Document Latin Accents Café français, Señor Niño, Über Größe, São Paulo -- 1 of 1 --",
+      "pptOutput": "Slide 1 * Café français, Señor Niño, Über Größe, São Paulo -- 1 of 1 --"
+    },
+    {
+      "script": "Cyrillic (Russian)",
+      "input": "Привет мир, Отчет по проекту",
+      "excelOutput": "Excel Spreadsheet PDF Export Column A | Column B Cyrillic (Russian) | , -- 1 of 1 --",
+      "wordOutput": "ERROR: Invalid PDF structure.",
+      "htmlOutput": "ERROR: Invalid PDF structure.",
+      "pptOutput": "ERROR: Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "script": "CJK (Chinese/Japanese)",
+      "input": "你好世界，这是一个测试文档。こんにちは",
+      "excelOutput": "ERROR: Cannot read properties of null (reading 'fileId')",
+      "wordOutput": "ERROR: Cannot read properties of null (reading 'fileId')",
+      "htmlOutput": "ERROR: Invalid PDF structure.",
+      "pptOutput": "ERROR: Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "script": "Arabic",
+      "input": "مرحبا بالعالم، هذا مستند اختبار",
+      "excelOutput": "ERROR: Cannot read properties of null (reading 'fileId')",
+      "wordOutput": "ERROR: Cannot read properties of null (reading 'fileId')",
+      "htmlOutput": "ERROR: Invalid PDF structure.",
+      "pptOutput": "ERROR: Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "script": "Mixed Latin + Non-Latin",
+      "input": "Invoice #999 €150 — Total | Клиент: Иван | 顧客: 田中 | عميل: أحمد",
+      "excelOutput": "ERROR: Cannot read properties of null (reading 'fileId')",
+      "wordOutput": "ERROR: Cannot read properties of null (reading 'fileId')",
+      "htmlOutput": "ERROR: Invalid PDF structure.",
+      "pptOutput": "ERROR: Cannot read properties of null (reading 'fileId')"
+    }
+  ],
+  "test3": [
+    {
+      "name": "1. merge-pdf",
+      "status": "FAIL",
+      "error": "Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "name": "2. split-pdf",
+      "status": "FAIL",
+      "error": "Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "name": "3. remove-pages",
+      "status": "FAIL",
+      "error": "Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "name": "4. extract-pages",
+      "status": "FAIL",
+      "error": "Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "name": "5. compress-pdf",
+      "status": "FAIL",
+      "error": "Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "name": "6. repair-pdf",
+      "status": "FAIL",
+      "error": "Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "name": "7. rotate-pdf",
+      "status": "FAIL",
+      "error": "Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "name": "8. add-watermark",
+      "status": "FAIL",
+      "error": "Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "name": "9. protect-pdf",
+      "status": "FAIL",
+      "error": "Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "name": "10. unlock-pdf",
+      "status": "FAIL",
+      "error": "Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "name": "11. redact-pdf",
+      "status": "FAIL",
+      "error": "Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "name": "12. image-to-pdf",
+      "status": "PASS"
+    },
+    {
+      "name": "13. pdf-to-markdown",
+      "status": "FAIL",
+      "error": "Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "name": "14. ai-summarizer",
+      "status": "FAIL",
+      "error": "Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "name": "15. translate-pdf",
+      "status": "FAIL",
+      "error": "Cannot read properties of null (reading 'fileId')"
+    },
+    {
+      "name": "16. background-remover",
+      "status": "PASS"
+    }
+  ],
+  "test4": {
+    "totalRequestsSent": 120,
+    "rateLimitedCount": 120,
+    "healthStatusDuringRateLimit": 200,
+    "healthExemptionVerified": true
+  }
+}

@@ -1,6 +1,7 @@
 {
   "appId": "com.omnipdf.desktop",
   "productName": "OmniPDF",
+  "electronDist": "node_modules/electron/dist",
   "directories": {
     "output": "release"
   },

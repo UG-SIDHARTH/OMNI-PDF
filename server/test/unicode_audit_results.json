@@ -1,0 +1,42 @@
+[
+  {
+    "category": "a) Latin Accents (French, Spanish, German, Portuguese)",
+    "input": "Café français, Señor Niño, Über Größe, São Paulo",
+    "excel": "Excel Spreadsheet PDF Export Field Name | Field Value Test Data | Café français, Señor Niño, Über Größe, São Paulo -- 1 of 1 --",
+    "word": "Word to PDF Export Header: Café français, Señor Niño, Über Größe, São Paulo -- 1 of 1 --",
+    "ppt": "Slide 1 * Café français, Señor Niño, Über Größe, São Paulo -- 1 of 1 --",
+    "html": "HTML Rendered PDF Document Title Café français, Señor Niño, Über Größe, São Paulo -- 1 of 1 --"
+  },
+  {
+    "category": "b) Cyrillic (Russian)",
+    "input": "Привет мир, Отчет по проекту",
+    "excel": "Excel Spreadsheet PDF Export Field Name | Field Value Test Data | , -- 1 of 1 --",
+    "word": "Word to PDF Export Header: , -- 1 of 1 --",
+    "ppt": "Slide 1 * , -- 1 of 1 --",
+    "html": "HTML Rendered PDF Document Title , -- 1 of 1 --"
+  },
+  {
+    "category": "c) CJK (Chinese / Japanese)",
+    "input": "你好世界，这是一个测试文档。こんにちは",
+    "excel": "Excel Spreadsheet PDF Export Field Name | Field Value Test Data | -- 1 of 1 --",
+    "word": "Word to PDF Export Header: -- 1 of 1 --",
+    "ppt": "Slide 1 * -- 1 of 1 --",
+    "html": "HTML Rendered PDF Document Title -- 1 of 1 --"
+  },
+  {
+    "category": "d) Arabic",
+    "input": "مرحبا بالعالم، هذا مستند اختبار",
+    "excel": "Excel Spreadsheet PDF Export Field Name | Field Value Test Data | -- 1 of 1 --",
+    "word": "Word to PDF Export Header: -- 1 of 1 --",
+    "ppt": "Slide 1 * -- 1 of 1 --",
+    "html": "HTML Rendered PDF Document Title -- 1 of 1 --"
+  },
+  {
+    "category": "e) Mixed Latin + Non-Latin",
+    "input": "Invoice #999 Total: €150 | Клиент: Иван | 顧客: 田中 | عميل: أحمد",
+    "excel": "Excel Spreadsheet PDF Export Field Name | Field Value Test Data | Invoice #999 Total: 150 | : | : | : -- 1 of 1 --",
+    "word": "Word to PDF Export Header: Invoice #999 Total: 150 | : | : | : -- 1 of 1 --",
+    "ppt": "Slide 1 * Invoice #999 Total: 150 | : | : | : -- 1 of 1 --",
+    "html": "HTML Rendered PDF Document Title Invoice #999 Total: 150 | : | : | : -- 1 of 1 --"
+  }
+]
