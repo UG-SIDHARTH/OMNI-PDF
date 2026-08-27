@@ -38,7 +38,7 @@ jobs:
         run: npm run build
 
       - name: Build Windows .exe (Installer & Portable)
-        run: npx electron-builder --win --publish never
+        run: npx electron-builder --win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
