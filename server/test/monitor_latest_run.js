@@ -28,7 +28,7 @@ function fetchGitHub(urlPath) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
-  console.log('Fetching latest workflow run for tag v0.4.0...');
+  console.log('Fetching latest workflow run for tag v0.4.1...');
   let latestRunId = null;
 
   for (let i = 0; i < 5; i++) {
@@ -78,8 +78,8 @@ async function main() {
   }
 
   // Verify GitHub Release Assets
-  console.log('Checking Release Assets for v0.4.0...');
-  const relRes = await fetchGitHub('/repos/UG-SIDHARTH/OMNI-PDF/releases/tags/v0.4.0');
+  console.log('Checking Release Assets for v0.4.1...');
+  const relRes = await fetchGitHub('/repos/UG-SIDHARTH/OMNI-PDF/releases/tags/v0.4.1');
   if (relRes.status === 200) {
     console.log(`Release Tag: ${relRes.json.tag_name} | Release Name: ${relRes.json.name}`);
     console.log(`Release Page: ${relRes.json.html_url}`);
