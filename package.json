@@ -12,7 +12,7 @@
     "build:server": "node scripts/bundle-server.js",
     "build": "vite build && node scripts/bundle-server.js",
     "preview": "vite preview",
-    "server": "node server/index.js",
+    "server": "node --env-file-if-exists=.env server/index.js",
     "start": "concurrently \"npm run dev\" \"npm run server\"",
     "lint": "node --check server/index.js server/routes/api.js server/middleware/security.js",
     "test": "node server/test/health.test.js",

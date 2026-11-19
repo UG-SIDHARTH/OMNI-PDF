@@ -7,6 +7,27 @@ import fs from 'fs';
 import { ensureSession } from './middleware/security.js';
 import apiRouter from './routes/api.js';
 
+// Load .env into process.env if present and the var isn't already set.
+// No-op when run via `npm run server` (uses --env-file), but keeps a bare
+// `node server/index.js` working too.
+try {
+  const envPath = path.resolve(process.cwd(), '.env');
+  if (fs.existsSync(envPath)) {
+    for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+      const t = line.trim();
+      if (!t || t.startsWith('#')) continue;
+      const eq = t.indexOf('=');
+      if (eq === -1) continue;
+      const key = t.slice(0, eq).trim();
+      let val = t.slice(eq + 1).trim();
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) val = val.slice(1, -1);
+      if (key && process.env[key] === undefined) process.env[key] = val;
+    }
+  }
+} catch (e) {
+  console.warn('[ENV] Could not load .env:', e.message);
+}
+
 const app = express();
 const PORT = process.env.PORT || 8092;
 const STORAGE_DIR = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : path.resolve('storage/uploads');

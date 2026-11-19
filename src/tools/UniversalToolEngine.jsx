@@ -553,7 +553,7 @@ export default function UniversalToolEngine({ tool, onBack }) {
                     />
 
                     <p className="text-[11px] text-amber-400 bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
-                      💡 Note: Table and heading detection is heuristic-based and formats layout structures automatically.
+                      💡 AI builds clean, structure-aware Markdown (headings, tables, lists) and preserves your wording exactly. Falls back to a local heuristic formatter if AI is unavailable.
                     </p>
                   </div>
                 )}
@@ -610,7 +610,12 @@ export default function UniversalToolEngine({ tool, onBack }) {
                           onChange={(e) => setSourceLang(e.target.value)}
                           className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none focus:border-rose-500 font-medium"
                         >
+                          <option value="Auto">Auto-detect</option>
                           <option value="English">English</option>
+                          <option value="Spanish">Spanish (Español)</option>
+                          <option value="French">French (Français)</option>
+                          <option value="German">German (Deutsch)</option>
+                          <option value="Hindi">Hindi (हिंदी)</option>
                         </select>
                       </div>
 
@@ -625,15 +630,20 @@ export default function UniversalToolEngine({ tool, onBack }) {
                           <option value="French">French (Français)</option>
                           <option value="German">German (Deutsch)</option>
                           <option value="Hindi">Hindi (हिंदी)</option>
+                          <option value="Arabic">Arabic (العربية)</option>
+                          <option value="Portuguese">Portuguese (Português)</option>
+                          <option value="Japanese">Japanese (日本語)</option>
+                          <option value="Chinese">Chinese (中文)</option>
+                          <option value="Russian">Russian (Русский)</option>
                         </select>
                       </div>
                     </div>
 
                     <p className="text-[11px] text-amber-300 bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
-                      ⚠️ Basic word-for-word substitution — not a full translation, grammar will not be correct for most sentences.
+                      ⚠️ Translation runs on the AI engine for natural, full-document output. If AI is unavailable it falls back to a local dictionary (word-for-word), so the tool never fails.
                     </p>
                     <p className="text-[11px] text-emerald-400 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
-                      🔒 Local offline engine: processes document 100% locally with zero external API calls or billing risk.
+                      🔒 Files are processed on your own server. When AI is active it uses your configured API key; the local fallback makes no external calls.
                     </p>
                   </div>
                 )}

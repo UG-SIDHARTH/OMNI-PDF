@@ -292,29 +292,29 @@ export const TOOL_CATEGORIES = [
       {
         id: 'ai-summarizer',
         name: 'AI Summarizer',
-        description: 'Generate concise summaries, key points, and Q&A from long PDFs.',
+        description: 'Generate concise summaries, key points, and Q&A from long PDFs using AI.',
         icon: 'Sparkles',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf',
-        badge: 'Coming Soon'
+        badge: 'AI Active'
       },
       {
         id: 'translate-pdf',
         name: 'Translate PDF',
-        description: 'Translate full PDF documents into multiple languages offline instantly.',
+        description: 'Translate full PDF documents into multiple languages with AI accuracy.',
         icon: 'Languages',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf',
-        badge: 'Coming Soon'
+        badge: 'AI Active'
       },
       {
         id: 'pdf-to-markdown',
         name: 'PDF to Markdown',
-        description: 'Convert PDF content into clean Markdown format for developers & LLMs.',
+        description: 'Convert PDF content into clean, structure-aware Markdown for developers & LLMs.',
         icon: 'FileCode2',
-        isWorking: false,
+        isWorking: true,
         accept: '.pdf',
-        badge: 'Coming Soon'
+        badge: 'AI Active'
       }
     ]
   },

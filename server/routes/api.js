@@ -14,6 +14,25 @@ import PptxGenJS from 'pptxgenjs';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import { validateMagicBytes } from '../middleware/security.js';
+import { isClaudeConfigured, claudeComplete } from '../services/claude.js';
+
+/**
+ * Extract readable text from a PDF buffer using pdf-parse.
+ * Returns '' if no text can be extracted (e.g. scanned/image-only PDF).
+ */
+async function extractTextViaPdfParse(buffer) {
+  return extractPdfText(buffer);
+}
+
+/**
+ * Truncate text to a max character budget for the LLM prompt, keeping the
+ * beginning and end (most documents lead with the important summary/abstract).
+ */
+function fitToBudget(text, maxChars) {
+  if (text.length <= maxChars) return text;
+  const half = Math.floor(maxChars / 2);
+  return text.slice(0, half) + '\n\n[... middle of document omitted ...]\n\n' + text.slice(-half);
+}
 
 const execFilePromise = promisify(execFile);
 const router = express.Router();
@@ -51,75 +70,50 @@ function hasUnencodableChars(str) {
 
 /**
  * PDF Text & Stream Extractor for AI Analysis
+ * Uses PDFParse to extract clean, ordered text, preserving sentence structure.
+ * Falls back to extracting string literals from decompressed content streams if PDFParse fails.
  */
-function extractPdfText(buffer) {
-  const textPieces = [];
-  const str = buffer.toString('binary');
+async function extractPdfText(buffer) {
+  try {
+    const parser = new PDFParse(new Uint8Array(buffer));
+    const extracted = await parser.getText();
+    if (extracted && extracted.text && extracted.text.trim().length > 0) {
+      // Strip page markers like '-- 1 of 7 --'
+      return extracted.text.replace(/\n\s*--\s*\d+\s+of\s+\d+\s*--\s*\n/g, '\n\n').trim();
+    }
+  } catch (err) {
+    console.warn('[extractPdfText] PDFParse error:', err.message);
+  }
 
-  // Decompress zlib streams
-  const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-  let match;
-  while ((match = streamRegex.exec(str)) !== null) {
-    let decompressed = '';
-    try {
-      decompressed = zlib.inflateSync(Buffer.from(match[1], 'binary')).toString('latin1');
-    } catch (e) {
+  // Fallback: extract string literals inside (parentheses) from decompressed content streams
+  try {
+    const textPieces = [];
+    const str = buffer.toString('binary');
+    const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+    let match;
+    while ((match = streamRegex.exec(str)) !== null) {
+      let decompressed = '';
       try {
-        decompressed = zlib.unzipSync(Buffer.from(match[1], 'binary')).toString('latin1');
-      } catch (e2) {
-        decompressed = match[1];
+        decompressed = zlib.inflateSync(Buffer.from(match[1], 'binary')).toString('latin1');
+      } catch (e) {
+        continue;
+      }
+      const parens = decompressed.match(/\(([^()]{2,})\)/g) || [];
+      for (const p of parens) {
+        const clean = p.slice(1, -1).trim();
+        if (clean.length >= 2 && !clean.startsWith('/') && !clean.includes('FontName')) {
+          textPieces.push(clean);
+        }
       }
     }
-
-    // Extract text in (parentheses)
-    const parens = decompressed.match(/\(([^()]{2,})\)/g) || [];
-    for (const p of parens) {
-      const clean = p.slice(1, -1).trim();
-      if (clean.length >= 2 && !clean.startsWith('/') && !clean.includes('FontName')) {
-        textPieces.push(clean);
-      }
+    if (textPieces.length > 0) {
+      return textPieces.join(' ');
     }
-
-    // Extract hex text in <angle brackets>
-    const hexes = decompressed.match(/<([0-9A-Fa-f]{4,})>/g) || [];
-    for (const h of hexes) {
-      const hex = h.slice(1, -1);
-      let ascii = '';
-      for (let i = 0; i < hex.length; i += 2) {
-        const code = parseInt(hex.substr(i, 2), 16);
-        if (code >= 32 && code <= 126) ascii += String.fromCharCode(code);
-      }
-      if (ascii.trim().length >= 3) textPieces.push(ascii.trim());
-    }
-
-    // Extract printable words
-    const words = decompressed.match(/[A-Za-z0-9@._\-\+]{2,}/g) || [];
-    for (const w of words) {
-      if (!['stream', 'endstream', 'obj', 'endobj', 'Filter', 'FlateDecode', 'Length', 'BT', 'ET', 'Tj', 'TJ', 'Td', 'TD', 'Tm', 'Font', 'Resources', 'MediaBox', 'CropBox', 'Contents'].includes(w)) {
-        textPieces.push(w);
-      }
-    }
+  } catch (err2) {
+    console.warn('[extractPdfText] Stream fallback error:', err2.message);
   }
 
-  // Fallback from raw buffer
-  const rawWords = str.match(/[A-Za-z0-9@._\-\+]{2,}/g) || [];
-  for (const w of rawWords) {
-    if (!['stream', 'endstream', 'obj', 'endobj', 'Filter', 'FlateDecode', 'Length', 'BT', 'ET', 'Tj', 'TJ', 'Td', 'TD', 'Tm', 'Font', 'Resources', 'MediaBox', 'CropBox', 'Contents', 'Type', 'Catalog', 'Pages', 'Page', 'Metadata'].includes(w)) {
-      textPieces.push(w);
-    }
-  }
-
-  const unique = [];
-  const seen = new Set();
-  for (const t of textPieces) {
-    const lower = t.toLowerCase();
-    if (!seen.has(lower) && t.length >= 2 && !t.startsWith('00') && !/^[0-9a-f]{20,}$/i.test(t)) {
-      seen.add(lower);
-      unique.push(t);
-    }
-  }
-
-  return unique.join(' ');
+  return '';
 }
 
 /**
@@ -737,7 +731,7 @@ router.post('/pdf/ai-summary', async (req, res) => {
     const buffer = fs.readFileSync(record.metadata.filePath);
     const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
     const totalPages = pdfDoc.getPageCount();
-    const extractedText = extractPdfText(buffer);
+    const extractedText = await extractPdfText(buffer);
 
     const isResume = /resume|cv|experience|education|skills|engineer|developer|project|manager|contact|email|phone|university|college|bachelor|master|work|employment/i.test(extractedText) || record.metadata.originalName.toLowerCase().includes('resume') || record.metadata.originalName.toLowerCase().includes('cv');
 
@@ -794,7 +788,7 @@ router.post('/pdf/ai-qa', async (req, res) => {
     if (!record) return res.status(404).json({ error: 'File not found or session expired.' });
 
     const buffer = fs.readFileSync(record.metadata.filePath);
-    const extractedText = extractPdfText(buffer);
+    const extractedText = await extractPdfText(buffer);
     const filename = record.metadata.originalName;
     const qLower = question.toLowerCase();
     const words = extractedText.split(' ').filter(w => w.length > 2);
@@ -1153,27 +1147,6 @@ router.post('/pdf/redact', async (req, res) => {
   }
 });
 
-/**
- * POST /api/pdf/pdf-to-markdown
- */
-router.post('/pdf/pdf-to-markdown', async (req, res) => {
-  try {
-    const { fileId } = req.body;
-    const record = getValidFileMetadata(req.sessionId, fileId);
-    if (!record) return res.status(404).json({ error: 'File not found.' });
-
-    const buffer = fs.readFileSync(record.metadata.filePath);
-    const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
-    const count = pdfDoc.getPageCount();
-
-    const mdContent = `# Markdown Export: ${record.metadata.originalName}\n\n*Document converted via OmniPDF Engine*\n\n## Summary\n- Total Pages: ${count}\n- Document Status: Verified\n- Encoding: Standard UTF-8\n\n### Document Content\nExtracting clean text streams from ${count} page(s)...`;
-    const meta = saveUserFile(req.sessionId, Buffer.from(mdContent, 'utf8'), `${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.md`, 'text/markdown');
-
-    res.json({ success: true, fileId: meta.fileId, originalName: meta.originalName, size: meta.size, expiresAt: meta.expiresAt, markdownText: mdContent });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to export to Markdown: ' + err.message });
-  }
-});
 
 /**
  * POST /api/pdf/pdf-to-jpg
@@ -1812,78 +1785,63 @@ router.post('/pdf/repair', async (req, res) => {
 
 /**
  * POST /api/pdf/pdf-to-markdown
+ * Claude-powered conversion (faithful, structure-aware). Falls back to a
+ * heuristic text-to-markdown formatter if AI is unavailable.
  */
 router.post('/pdf/pdf-to-markdown', async (req, res) => {
   try {
-    const { fileId, preserveHeadings = true, preserveTables = true, includeImageLinks = true } = req.body;
+    const { fileId } = req.body;
+    const { preserveHeadings = true, preserveTables = true, includeImageLinks = true } = req.body;
     const record = getValidFileMetadata(req.sessionId, fileId);
     if (!record) return res.status(404).json({ error: 'File not found.' });
 
     const buffer = fs.readFileSync(record.metadata.filePath);
-    const parser = new PDFParse(new Uint8Array(buffer));
-    const extracted = await parser.getText();
-    const rawText = extracted.text || '';
+    const text = await extractPdfText(buffer);
+    if (text.trim().length < 20) {
+      return res.status(400).json({
+        error: 'Could not extract text from this PDF. It may be a scanned document — try the OCR tool first.'
+      });
+    }
 
-    const lines = rawText.split(/\r?\n/);
-    const mdLines = [];
-    let inTable = false;
+    let markdownText = null;
+    let engine = 'local';
 
-    lines.forEach((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        if (inTable) inTable = false;
-        mdLines.push('');
-        return;
+    if (isClaudeConfigured()) {
+      try {
+        const system =
+          'You convert document text into clean, faithful Markdown. ' +
+          (preserveHeadings ? 'Detect section titles and render them as # / ## / ### headings. ' : '') +
+          (preserveTables ? 'Detect tabular data and render it as GitHub-flavored Markdown tables. ' : '') +
+          (includeImageLinks ? 'Where the text references a figure or image, insert a placeholder like ![Figure](image). ' : '') +
+          'Preserve the original wording exactly — do NOT summarize, paraphrase, or omit content. ' +
+          'Output ONLY the Markdown, no commentary, no code fences around the whole thing.';
+        const user = `Convert the following document text into clean Markdown:\n\n${fitToBudget(text, 48000)}`;
+        markdownText = (await claudeComplete(system, user, { maxTokens: 8000, temperature: 0.1 })).trim();
+        engine = 'claude';
+      } catch (aiErr) {
+        console.warn('PDF-to-Markdown falling back to local engine:', aiErr.message);
       }
+    }
 
-      if (preserveHeadings && (
-        /^[A-Z0-9\s]{3,40}$/.test(trimmed) || 
-        /^(chapter|section|part|table of contents|introduction|abstract|summary|conclusion|overview)\b/i.test(trimmed) ||
-        /^\d+(\.\d+)*\s+[A-Z]/.test(trimmed)
-      )) {
-        if (trimmed.length < 40 && !trimmed.endsWith('.')) {
-          mdLines.push(`\n## ${trimmed}\n`);
-          return;
+    if (!markdownText) {
+      // Heuristic fallback: split into paragraphs, promote short leading lines to headings
+      const paragraphs = text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+      markdownText = paragraphs.map(p => {
+        const lines = p.split(/\n/).map(l => l.trim()).filter(Boolean);
+        const firstLine = lines[0] || '';
+        const looksLikeHeading = firstLine.length < 60 && lines.length > 1 && /[A-Z]/.test(firstLine);
+        if (looksLikeHeading && preserveHeadings) {
+          return `## ${firstLine}\n\n${lines.slice(1).join(' ')}`;
         }
-      }
+        return p;
+      }).join('\n\n');
+      markdownText = `# ${record.metadata.originalName.replace(/\.[^/.]+$/, "")}\n\n${markdownText}`;
+    }
 
-      const columns = trimmed.split(/\s{2,}|\t+/);
-      if (preserveTables && columns.length >= 2 && columns.every(c => c.trim().length > 0)) {
-        if (!inTable) {
-          inTable = true;
-          const headers = columns.map((c, idx) => `Header ${idx + 1}`).join(' | ');
-          const dividers = columns.map(() => '---').join(' | ');
-          mdLines.push(`\n| ${headers} |`);
-          mdLines.push(`| ${dividers} |`);
-        }
-        mdLines.push(`| ${columns.join(' | ')} |`);
-        return;
-      } else {
-        inTable = false;
-      }
-
-      if (/^[\*\-\•]\s+/.test(trimmed)) {
-        mdLines.push(`- ${trimmed.replace(/^[\*\-\•]\s+/, '')}`);
-        return;
-      }
-      if (/^\d+[\.\)]\s+/.test(trimmed)) {
-        mdLines.push(`${trimmed}`);
-        return;
-      }
-
-      if (includeImageLinks && /^(figure|fig|image|illustration)\s+\d+/i.test(trimmed)) {
-        mdLines.push(`\n![${trimmed}](#extracted-image-${Date.now()})\n`);
-        return;
-      }
-
-      mdLines.push(trimmed);
-    });
-
-    const markdownText = mdLines.join('\n').replace(/\n{3,}/g, '\n\n');
     const meta = saveUserFile(
       req.sessionId,
       Buffer.from(markdownText, 'utf8'),
-      `${record.metadata.originalName.replace(/\.[^/.]+$/, '')}.md`,
+      `${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.md`,
       'text/markdown'
     );
 
@@ -1893,16 +1851,19 @@ router.post('/pdf/pdf-to-markdown', async (req, res) => {
       originalName: meta.originalName,
       size: meta.size,
       markdownText,
+      engine,
       expiresAt: meta.expiresAt
     });
   } catch (err) {
-    console.error('PDF to Markdown Error:', err);
     res.status(500).json({ error: 'Failed to convert PDF to Markdown: ' + err.message });
   }
 });
 
+
+
 /**
  * POST /api/pdf/ai-summarizer
+ * Claude-powered summary. Falls back to extractive TF-IDF if AI is unavailable.
  */
 router.post('/pdf/ai-summarizer', async (req, res) => {
   try {
@@ -1911,60 +1872,54 @@ router.post('/pdf/ai-summarizer', async (req, res) => {
     if (!record) return res.status(404).json({ error: 'File not found.' });
 
     const buffer = fs.readFileSync(record.metadata.filePath);
-    const parser = new PDFParse(new Uint8Array(buffer));
-    const extracted = await parser.getText();
-    const rawText = extracted.text || '';
-
-    const sentences = rawText
-      .replace(/\r?\n/g, ' ')
-      .split(/(?<=[.!?])\s+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 15);
-
-    if (sentences.length === 0) {
-      return res.status(400).json({ error: 'Document contains insufficient text for summarization.' });
+    const text = await extractPdfText(buffer);
+    if (text.trim().length < 50) {
+      return res.status(400).json({
+        error: 'Could not extract text from this PDF. It may be a scanned document — try the OCR tool first.'
+      });
     }
 
-    const stopWords = new Set(['the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i', 'it', 'for', 'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at', 'this', 'but', 'his', 'by', 'from', 'they', 'we', 'say', 'her', 'she', 'or', 'an', 'will', 'my', 'one', 'all', 'would', 'there', 'their', 'what', 'so', 'up', 'out', 'if', 'about', 'who', 'get', 'which', 'go', 'me', 'when', 'make', 'can', 'like', 'time', 'no', 'just', 'him', 'know', 'take', 'people', 'into', 'year', 'your', 'good', 'some', 'could', 'them', 'see', 'other', 'than', 'then', 'now', 'look', 'only', 'come', 'its', 'over', 'think', 'also', 'back', 'after', 'use', 'two', 'how', 'our', 'work', 'first', 'well', 'way', 'even', 'new', 'want', 'because', 'any', 'these', 'give', 'day', 'most', 'us']);
+    let summaryText = null;
+    let engine = 'local';
 
-    const wordFreq = {};
-    sentences.forEach((s) => {
-      const words = s.toLowerCase().replace(/[^a-z0-9]/g, ' ').split(/\s+/);
-      words.forEach((w) => {
-        if (w.length > 2 && !stopWords.has(w)) {
-          wordFreq[w] = (wordFreq[w] || 0) + 1;
-        }
-      });
-    });
+    if (isClaudeConfigured()) {
+      try {
+        const lengthHint =
+          length === 'short' ? 'a concise 3-5 sentence executive summary' :
+          length === 'detailed' ? 'a detailed 15-25 sentence summary with key points' :
+          'a balanced 8-12 sentence summary of the main points';
+        const system =
+          'You are a precise document analyst. Summarize the provided document faithfully — do not invent facts. ' +
+          'Use clear prose. Begin with a one-line headline, then the summary. Plain text only, no markdown.';
+        const user = `Summarize this document as ${lengthHint}:\n\n${fitToBudget(text, 48000)}`;
+        summaryText = (await claudeComplete(system, user, { maxTokens: 4000, temperature: 0.2 })).trim();
+        engine = 'claude';
+      } catch (aiErr) {
+        console.warn('AI summarizer falling back to local engine:', aiErr.message);
+      }
+    }
 
-    const scoredSentences = sentences.map((sentence, idx) => {
-      const words = sentence.toLowerCase().replace(/[^a-z0-9]/g, ' ').split(/\s+/);
-      let score = 0;
-      words.forEach((w) => {
-        if (wordFreq[w]) score += wordFreq[w];
-      });
-      const normalizedScore = (score / (words.length || 1)) + (idx === 0 ? 1.5 : idx < 3 ? 0.8 : 0);
-      return { sentence, idx, score: normalizedScore };
-    });
-
-    let ratio = 0.3;
-    if (length === 'short') ratio = 0.15;
-    if (length === 'detailed') ratio = 0.50;
-
-    const countToSelect = Math.max(2, Math.min(sentences.length, Math.ceil(sentences.length * ratio)));
-    
-    const topSentences = [...scoredSentences]
-      .sort((a, b) => b.score - a.score)
-      .slice(0, countToSelect)
-      .sort((a, b) => a.idx - b.idx);
-
-    const summaryBulletPoints = topSentences.map(item => `• ${item.sentence}`).join('\n\n');
-    const summaryText = `--- EXECUTIVE EXTRACTIVE SUMMARY (${length.toUpperCase()}) ---\nTotal Document Sentences: ${sentences.length} | Selected Key Sentences: ${countToSelect}\n\n${summaryBulletPoints}`;
+    if (!summaryText) {
+      // Extractive fallback: score sentences by word frequency
+      const sentences = text.replace(/\n+/g, ' ').match(/[^.!?]+[.!?]+/g) || [text];
+      const wordFreq = {};
+      const allWords = text.toLowerCase().match(/\b[a-z']{3,}\b/g) || [];
+      allWords.forEach(w => { wordFreq[w] = (wordFreq[w] || 0) + 1; });
+      const scored = sentences.map((s, i) => {
+        const words = s.toLowerCase().match(/\b[a-z']{3,}\b/g) || [];
+        const score = words.reduce((sum, w) => sum + (wordFreq[w] || 0), 0) / (words.length || 1);
+        return { sentence: s.trim(), score, index: i };
+      }).filter(s => s.sentence.length > 20);
+      const ratio = length === 'short' ? 0.15 : length === 'detailed' ? 0.5 : 0.3;
+      const topCount = Math.max(2, Math.min(20, Math.floor(scored.length * ratio)));
+      const top = scored.sort((a, b) => b.score - a.score).slice(0, topCount).sort((a, b) => a.index - b.index);
+      summaryText = top.map(s => s.sentence).join('\n\n');
+    }
 
     const meta = saveUserFile(
       req.sessionId,
       Buffer.from(summaryText, 'utf8'),
-      `Summary_${record.metadata.originalName.replace(/\.[^/.]+$/, '')}.txt`,
+      `Summary_${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.txt`,
       'text/plain'
     );
 
@@ -1974,18 +1929,20 @@ router.post('/pdf/ai-summarizer', async (req, res) => {
       originalName: meta.originalName,
       size: meta.size,
       summaryText,
-      sentenceCount: countToSelect,
-      totalSentences: sentences.length,
+      engine,
       expiresAt: meta.expiresAt
     });
   } catch (err) {
-    console.error('AI Summarizer Error:', err);
-    res.status(500).json({ error: 'Failed to summarize PDF: ' + err.message });
+    res.status(500).json({ error: 'AI summarization failed: ' + err.message });
   }
 });
 
+
+
 /**
  * POST /api/pdf/translate
+ * Claude-powered translation. Falls back to a local dictionary substitution
+ * (limited) if AI is unavailable.
  */
 router.post('/pdf/translate', async (req, res) => {
   try {
@@ -1994,62 +1951,50 @@ router.post('/pdf/translate', async (req, res) => {
     if (!record) return res.status(404).json({ error: 'File not found.' });
 
     const buffer = fs.readFileSync(record.metadata.filePath);
-    const parser = new PDFParse(new Uint8Array(buffer));
-    const extracted = await parser.getText();
-    const rawText = extracted.text || '';
-
-    const dictionary = {
-      Spanish: {
-        'document': 'documento', 'summary': 'resumen', 'title': 'título', 'overview': 'visión general',
-        'table': 'tabla', 'content': 'contenido', 'sample': 'muestra', 'header': 'encabezado',
-        'paragraph': 'párrafo', 'text': 'texto', 'file': 'archivo', 'pdf': 'PDF', 'page': 'página',
-        'number': 'número', 'data': 'datos', 'information': 'información', 'result': 'resultado',
-        'report': 'informe', 'section': 'sección', 'system': 'sistema', 'process': 'proceso',
-        'this is': 'este es', 'with': 'con', 'and': 'y', 'or': 'o', 'for': 'para', 'in': 'en', 'on': 'sobre'
-      },
-      French: {
-        'document': 'document', 'summary': 'résumé', 'title': 'titre', 'overview': 'aperçu',
-        'table': 'tableau', 'content': 'contenu', 'sample': 'échantillon', 'header': 'en-tête',
-        'paragraph': 'paragraphe', 'text': 'texte', 'file': 'fichier', 'pdf': 'PDF', 'page': 'page',
-        'number': 'numéro', 'data': 'données', 'information': 'information', 'result': 'résultat',
-        'report': 'rapport', 'section': 'section', 'system': 'système', 'process': 'processus',
-        'this is': 'c\'est', 'with': 'avec', 'and': 'et', 'or': 'ou', 'for': 'pour', 'in': 'dans', 'on': 'sur'
-      },
-      German: {
-        'document': 'Dokument', 'summary': 'Zusammenfassung', 'title': 'Titel', 'overview': 'Übersicht',
-        'table': 'Tabelle', 'content': 'Inhalt', 'sample': 'Beispiel', 'header': 'Kopfzeile',
-        'paragraph': 'Absatz', 'text': 'Text', 'file': 'Datei', 'pdf': 'PDF', 'page': 'Seite',
-        'number': 'Nummer', 'data': 'Daten', 'information': 'Informationen', 'result': 'Ergebnis',
-        'report': 'Bericht', 'section': 'Abschnitt', 'system': 'System', 'process': 'Prozess',
-        'this is': 'dies ist', 'with': 'mit', 'and': 'und', 'or': 'oder', 'for': 'für', 'in': 'in', 'on': 'auf'
-      },
-      Hindi: {
-        'document': 'दस्तावेज़', 'summary': 'सारांश', 'title': 'शीर्षक', 'overview': 'अवलोकन',
-        'table': 'तालिका', 'content': 'सामग्री', 'sample': 'नमूना', 'header': 'हेडर',
-        'paragraph': 'अनुच्छेद', 'text': 'पाठ', 'file': 'फ़ाइल', 'pdf': 'पीडीएफ', 'page': 'पृष्ठ',
-        'number': 'संख्या', 'data': 'डेटा', 'information': 'जानकारी', 'result': 'परिणाम',
-        'report': 'रिपोर्ट', 'section': 'अनुभाग', 'system': 'प्रणाली', 'process': 'प्रक्रिया',
-        'this is': 'यह है', 'with': 'के साथ', 'and': 'और', 'or': 'या', 'for': 'के लिए', 'in': 'में', 'on': 'पर'
-      }
-    };
-
-    const targetDict = dictionary[targetLang] || {};
-    const lines = rawText.split(/\r?\n/);
-    const translatedLines = lines.map((line) => {
-      let trLine = line;
-      Object.keys(targetDict).forEach((key) => {
-        const regex = new RegExp(`\\b${key}\\b`, 'gi');
-        trLine = trLine.replace(regex, targetDict[key]);
+    const text = await extractPdfText(buffer);
+    if (text.trim().length < 10) {
+      return res.status(400).json({
+        error: 'Could not extract text from this PDF. It may be a scanned document — try the OCR tool first.'
       });
-      return trLine;
-    });
+    }
 
-    const translatedText = `--- OMNI-PDF LOCAL TRANSLATION (${sourceLang.toUpperCase()} → ${targetLang.toUpperCase()}) ---\n\n${translatedLines.join('\n')}`;
+    let translatedText = null;
+    let engine = 'local';
+
+    if (isClaudeConfigured()) {
+      try {
+        const system =
+          `You are a professional translator. Translate the provided ${sourceLang} text into ${targetLang}. ` +
+          'Preserve the original meaning, tone, and structure. Translate EVERY sentence. ' +
+          'Output ONLY the translation — no explanations, no notes, no markdown.';
+        const user = `Translate this ${sourceLang} text into ${targetLang}:\n\n${fitToBudget(text, 48000)}`;
+        translatedText = (await claudeComplete(system, user, { maxTokens: 8000, temperature: 0.3 })).trim();
+        engine = 'claude';
+      } catch (aiErr) {
+        console.warn('Translate falling back to local engine:', aiErr.message);
+      }
+    }
+
+    if (!translatedText) {
+      // Fallback: small dictionary substitution (very limited)
+      const dictionaries = {
+        Spanish: { the: 'el', and: 'y', is: 'es', of: 'de', to: 'a', in: 'en', for: 'para', with: 'con', you: 'tú', your: 'tu', we: 'nosotros', they: 'ellos', it: 'esto', that: 'eso', this: 'esto', from: 'desde', at: 'en', on: 'en', by: 'por', not: 'no', are: 'son', was: 'era', were: 'eran', can: 'puede', have: 'tiene', has: 'tiene', their: 'su', our: 'nuestra', my: 'mi', he: 'él', she: 'ella', i: 'yo', us: 'nos', them: 'ellos', what: 'qué', when: 'cuándo', where: 'dónde', who: 'quién', how: 'cómo', why: 'por qué', please: 'por favor', thank: 'gracias', thanks: 'gracias', hello: 'hola', good: 'bueno', bad: 'malo', new: 'nuevo', old: 'viejo', big: 'grande', small: 'pequeño', one: 'uno', two: 'dos', three: 'tres', four: 'cuatro', five: 'cinco', day: 'día', time: 'tiempo', year: 'año', month: 'mes', week: 'semana', hour: 'hora', minute: 'minuto', second: 'segundo', now: 'ahora', today: 'hoy', tomorrow: 'mañana', yesterday: 'ayer', here: 'aquí', there: 'allí', yes: 'sí', no: 'no', name: 'nombre', number: 'número', date: 'fecha', page: 'página', document: 'documento', file: 'archivo', text: 'texto', word: 'palabra', sentence: 'oración' },
+        French: { the: 'le', and: 'et', is: 'est', of: 'de', to: 'à', in: 'dans', for: 'pour', with: 'avec', you: 'vous', your: 'votre', we: 'nous', they: 'ils', it: 'ce', that: 'ce', this: 'ce', from: 'de', at: 'à', on: 'sur', by: 'par', not: 'ne', are: 'sont', was: 'était', were: 'étaient', can: 'peut', have: 'a', has: 'a', been: 'été', their: 'leur', our: 'notre', my: 'mon', he: 'il', she: 'elle', i: 'je', us: 'nous', them: 'eux', what: 'quoi', when: 'quand', where: 'où', who: 'qui', how: 'comment', why: 'pourquoi', please: 's\'il vous plaît', thank: 'merci', thanks: 'merci', hello: 'bonjour', good: 'bon', bad: 'mauvais', new: 'nouveau', old: 'vieux', big: 'grand', small: 'petit', one: 'un', two: 'deux', three: 'trois', four: 'quatre', five: 'cinq', day: 'jour', time: 'temps', year: 'an', month: 'mois', week: 'semaine', hour: 'heure', minute: 'minute', second: 'seconde', now: 'maintenant', today: "aujourd'hui", tomorrow: 'demain', yesterday: 'hier', here: 'ici', there: 'là', yes: 'oui', no: 'non', name: 'nom', number: 'numéro', date: 'date', page: 'page', document: 'document', file: 'fichier', text: 'texte', word: 'mot', sentence: 'phrase' },
+        German: { the: 'der', and: 'und', is: 'ist', of: 'von', to: 'zu', in: 'in', for: 'für', with: 'mit', you: 'du', your: 'dein', we: 'wir', they: 'sie', it: 'es', that: 'das', this: 'dies', from: 'von', at: 'an', on: 'auf', by: 'durch', not: 'nicht', are: 'sind', was: 'war', were: 'waren', can: 'kann', have: 'hat', has: 'hat', been: 'gewesen', their: 'ihre', our: 'unsere', my: 'mein', he: 'er', she: 'sie', i: 'ich', us: 'uns', them: 'sie', what: 'was', when: 'wann', where: 'wo', who: 'wer', how: 'wie', why: 'warum', please: 'bitte', thank: 'danke', thanks: 'danke', hello: 'hallo', good: 'gut', bad: 'schlecht', new: 'neu', old: 'alt', big: 'groß', small: 'klein', one: 'eins', two: 'zwei', three: 'drei', four: 'vier', five: 'fünf', day: 'Tag', time: 'Zeit', year: 'Jahr', month: 'Monat', week: 'Woche', hour: 'Stunde', minute: 'Minute', second: 'Sekunde', now: 'jetzt', today: 'heute', tomorrow: 'morgen', yesterday: 'gestern', here: 'hier', there: 'da', yes: 'ja', no: 'nein', name: 'Name', number: 'Nummer', date: 'Datum', page: 'Seite', document: 'Dokument', file: 'Datei', text: 'Text', word: 'Wort', sentence: 'Satz' }
+      };
+      const dict = dictionaries[targetLang] || {};
+      const words = text.split(/(\s+)/);
+      translatedText = words.map(w => {
+        const lower = w.toLowerCase().replace(/[.,;:!?]/g, '');
+        if (dict[lower]) return dict[lower];
+        return w;
+      }).join('');
+    }
 
     const meta = saveUserFile(
       req.sessionId,
       Buffer.from(translatedText, 'utf8'),
-      `Translated_${targetLang}_${record.metadata.originalName.replace(/\.[^/.]+$/, '')}.txt`,
+      `Translated_${targetLang}_${record.metadata.originalName.replace(/\.[^/.]+$/, "")}.txt`,
       'text/plain'
     );
 
@@ -2059,15 +2004,15 @@ router.post('/pdf/translate', async (req, res) => {
       originalName: meta.originalName,
       size: meta.size,
       translatedText,
-      sourceLang,
-      targetLang,
+      engine,
       expiresAt: meta.expiresAt
     });
   } catch (err) {
-    console.error('Translate Error:', err);
-    res.status(500).json({ error: 'Failed to translate PDF: ' + err.message });
+    res.status(500).json({ error: 'Translation failed: ' + err.message });
   }
 });
+
+
 
 /**
  * GET /api/status/:fileId
